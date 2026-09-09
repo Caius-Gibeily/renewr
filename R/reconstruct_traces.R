@@ -353,21 +353,29 @@ summarise_traces <- function(model = NULL,recon_data = NULL, level="ind",prior=F
   }
   y_vec <- as.vector(aperm(sampled_gp,c(3,2,1)))
 
-  base_df <- tidyr::expand_grid(
-    sample = as.factor(1:n_samples),
-    ind = as.factor(1:N),
-    grid_idx = seq_along(t_grid)
-  ) |>
-    mutate(
-      x = t_grid[grid_idx],
-      group = as.factor(g_membership[ind])
-    ) |>
-    select(ind, group, sample, x)
+
+  sample_id <- factor(seq_len(n_samples))
+  ind_id    <- factor(seq_len(N))
+  group_id  <- factor(g_membership[seq_len(N)])
+
+
+  base_df <- data.table::CJ(
+    ind = ind_id,
+    sample = sample_id,
+    x = t_grid,
+    sorted = FALSE
+  )
+
+  base_dt[, group := rep(group_id,
+                         each = length(sample_id) * length(t_grid))]
+
+  data.table::setcolorder(base_df, c("ind", "group", "sample", "x"))
 
   sampled_traces <- bind_cols(base_df, y = y_vec)
 
   return(list(sampled_traces = sampled_traces,
-              survival_params = lapply(survival_params, function(mat) mat[sample_indices])))
+              survival_params = lapply(survival_params,
+                                       function(mat) mat[sample_indices])))
 }
 #' @noRd
 .apply_rescaling <- function(model, recon_data) {
@@ -411,54 +419,3 @@ summarise_traces <- function(model = NULL,recon_data = NULL, level="ind",prior=F
   w0xk <- outer(w0 * x, k)
   return(cbind(cos(w0xk),sin(w0xk)))
 }
-
-#' @noRd
-.diagSPD_EQ <- function(alpha, rho, M, L) {
-  indices <- seq_len(M)
-  factor <- alpha * sqrt(sqrt(2 * pi) * rho)
-  exponent <- -0.25 * (rho * pi / (2 * L))^2
-  factor * exp(exponent * indices^2)
-}
-
-#' @noRd
-.diagSPD_Matern52 <- function(alpha, rho, M, L) {
-  factor <- 16 * (sqrt(5) / rho)^5
-  indices <- (pi / (2 * L) * seq_len(M))^2
-
-  denom <- 3 * ((5 / rho^2) + indices)^3
-  return(alpha * sqrt(factor / denom))
-}
-
-#' @noRd
-.diagSPD_Matern12 <- function(alpha, rho, M, L) {
-  indices <- 1:M
-  factor <- 2.0
-
-  denom <- rho * ((1.0 / rho)^2 + (pi * indices / (2 * L))^2)
-  return(alpha * sqrt(factor * (1/denom)))
-}
-
-#' @noRd
-.diagSPD_Matern32 <- function(alpha, rho, M, L) {
-
-  M_series <- seq_len(M)
-  indices <- ((pi / (2 * L)) * M_series)^2
-
-  factor <- 2 * alpha * (sqrt(3) / rho)^1.5
-  denom <- 3 / (rho^2) + indices
-  return(factor / denom)
-}
-
-#' @noRd
-.diagSPD_Periodic <- function(alpha, rho, M,...) {
-  a <- 1 / (rho^2)
-  indices <- 1:M
-
-  log_bessel <- log(besselI(x = a, nu = indices, expon.scaled = TRUE)) + a
-
-  q <- exp(log(alpha) + 0.5 * (log(2) - a + log_bessel))
-
-  # append_row(q, q) is equivalent to concatenating the vector with itself
-  return(append_row(q,q))
-}
-

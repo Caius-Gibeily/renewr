@@ -14,7 +14,7 @@ simulate_events(
   sigma = 1,
   Q = 0,
   baseline = 0,
-  resolution = 0.005,
+  resolution = 0.01,
   seed = NULL
 )
 }

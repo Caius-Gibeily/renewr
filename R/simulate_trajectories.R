@@ -298,7 +298,8 @@ simulate_gp_traces <- function(duration = 100, n_groups = 1, n_ind = 10,
     coeffs <- matrix(stats::rnorm(n * df, 0, 1), nrow = df, ncol = n)
     if (is.matrix(mu_coeffs)) {
       for (g in unique(g_membership)) {
-        coeffs[, g_membership == g] <- mu_coeffs[, g_membership == g] + t(scale(t(coeffs[, g_membership == g]))) * sd_coeffs
+        coeffs[, g_membership == g] <- mu_coeffs[, g_membership == g] +
+          t(scale(t(coeffs[, g_membership == g]))) * sd_coeffs
       }
     }
 

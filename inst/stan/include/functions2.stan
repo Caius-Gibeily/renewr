@@ -1,58 +1,3 @@
-
-vector get_qx(int n_quad) {
-  vector[n_quad+1] qx;
-  if (n_quad == 3) {
-    qx = [0.1127016654,
-       0.5,
-       0.8872983346,
-       1]';
-  } else if (n_quad == 4) {
-    qx = [0.069432,
-      0.330009,
-      0.669991,
-      0.930568,
-      1
-    ]';
-  } else if (n_quad == 5) {
-    qx = [0.0469101,
-      0.2307653,
-      0.5,
-      0.7692347,
-      0.9530899,
-      1
-    ]';
-  }
-  return qx;
-}
-
-vector get_qw(int n_quad) {
-  vector[n_quad] qw;
-
-  if (n_quad == 3) {
-    qw = [5.0 / 18.0,
-       8.0 / 18.0,
-       5.0 / 18.0]';
-
-  } else if (n_quad == 4) {
-
-    qw = [0.1739270,
-    0.3260725,
-    0.3260725,
-    0.1739270
-    ]';
-
-  } else if (n_quad == 5) {
-
-    qw = [0.1184634,
-    0.2393143,
-    0.2844444,
-    0.2393143,
-    0.1184634
-    ]';
-  }
-  return qw;
-}
-
 // spectral basis set, phi
 matrix phi(int N, int M, real L, vector x) {
   matrix[N, M] res;
@@ -305,10 +250,6 @@ void apply_prior_lp(real param, real dist, real arg1, real arg2) {
   } else if (dist == 3) {
     target += cauchy_lpdf(param | arg1, arg2);
   } else if (dist == 4) {
-    target += inv_gamma_lpdf(param | arg1, arg2);
-  } else if (dist == 5) {
-    target += beta_lpdf(param | arg1, arg2);
-  } else if (dist == 5) {
     target += exponential_lpdf(param | arg1) - exponential_lccdf(1.0 | arg1);
   }
 }
@@ -344,141 +285,62 @@ real apply_prior_rng(real dist, real arg1, real arg2, int apply_floor) {
   return param;
 }
 
-vector exponential_likelihood(int N_total, int n_quad, vector qw, matrix eta_quad,
-  matrix dt_quad, array[] int censored) {
+matrix exponential_likelihood(int N_total, vector log_qw, array[] vector eta_quad, vector dt) {
 
-  vector[N_total] log_kernel;
-  matrix[n_quad+1,N_total] rate_quad = exp(-eta_quad);
-  vector[N_total] rate_end = rate_quad[n_quad+1]';
-  vector[N_total] dt = dt_quad[n_quad+1]';
-  real H;
+  matrix[N_total, 3] log_kernel;
 
-  for (n in 1:N_total) {
-
-    if (censored[n] == 0) {
-      H = 0;
-      for (j in 1:n_quad) {
-
-        H += qw[j] * rate_quad[j,n];
-
-      }
-
-      H *= dt[n];
-      H = fmax(H, 1e-12);
-      // sum log probability density
-      log_kernel[n] = log(rate_end[n]) - H;
-
-    } else if (censored[n] == 1) { // right-censored
-      log_kernel[n] = exponential_lccdf(dt[n] | rate_end[n]);
-    } else if (censored[n] == 2) { // left-censored
-      log_kernel[n] = exponential_lcdf(dt[n] | rate_end[n]);
+  for (j in 1:3) {
+    vector[N_total] scale = exp(eta_quad[j]);
+    for (n in 1:N_total) {
+      log_kernel[n, j] = log_qw[j] + exponential_lpdf(dt[n] | inv(scale[n]));
     }
-
   }
   return log_kernel;
 }
 
+matrix gamma_likelihood(int N_total, vector log_qw, array[] vector eta_quad,
+  vector dt, real k) {
 
-vector gamma_likelihood(int N_total, int n_quad, vector qw, matrix eta_quad,
-  matrix dt_quad, real k, array[] int censored) {
+  matrix[N_total, 3] log_kernel;
 
-  vector[N_total] log_kernel;
-  matrix[n_quad+1,N_total] rate_quad = exp(-eta_quad);
-  vector[N_total] rate_end = rate_quad[n_quad+1]';
-  vector[N_total] dt = dt_quad[n_quad+1]';
-  real H;
-
-  vector[n_quad] log_h_quad;
-  for (n in 1:N_total) {
-
-    for (j in 1:n_quad) {
-      log_h_quad[j] = log(qw[j]) +
-        gamma_lh(dt_quad[j,n], k, rate_quad[j,n]);
+  for (j in 1:3) {
+    vector[N_total] rate = exp(-eta_quad[j]);
+    for (n in 1:N_total) {
+        log_kernel[n, j] = log_qw[j] + gamma_lpdf(dt[n] | k, rate[n]);
     }
-
-    H = dt[n] * exp(log_sum_exp(log_h_quad));
-    H = fmax(H, 1e-12);
-
-    if (censored[n] == 0) {
-
-      // sum log probability density
-      log_kernel[n] = gamma_lh(dt[n], k, rate_end[n]) - H;
-
-    } else if (censored[n] == 1) { // right-censored
-      log_kernel[n] = -H;
-    } else if (censored[n] == 2) { // left-censored
-      log_kernel[n] = log1m_exp(-H);
-    }
-
   }
   return log_kernel;
 }
 
-vector weibull_likelihood(int N_total, int n_quad, vector qw, matrix eta_quad,
-  matrix dt_quad, real shape, array[] int censored) {
+matrix weibull_likelihood(int N_total, vector log_qw, array[] vector eta_quad, vector dt, real shape) {
 
-  vector[N_total] log_kernel;
-  matrix[n_quad+1,N_total] scale_quad = exp(eta_quad);
-  vector[N_total] scale_end = scale_quad[n_quad+1]';
+  matrix[N_total, 3] log_kernel;
 
-  vector[N_total] dt = dt_quad[n_quad+1]';
+  for (j in 1:3) {
+    vector[N_total] scale = exp(eta_quad[j]);
+    for (n in 1:N_total) {
 
-  real H;
-
-  for (n in 1:N_total) {
-
-    vector[n_quad] log_h_quad;
-    for (j in 1:n_quad) {
-
-      log_h_quad[j] = log(qw[j]) + weibull_lh(dt_quad[j,n], shape, scale_quad[j,n]);
+        log_kernel[n, j] = log_qw[j] + weibull_lpdf(dt[n] | shape, scale[n]);
 
     }
-    H = dt[n] * exp(log_sum_exp(log_h_quad));
-    H = fmax(H, 1e-12);
-    if (censored[n] == 0) {
-
-      log_kernel[n] = weibull_lh(dt[n], shape, scale_end[n]) - H;
-
-    } else if (censored[n] == 1) { // right-censored
-      log_kernel[n] = -H;
-
-    } else if (censored[n] == 2) { // left-censored
-      log_kernel[n] = log1m_exp(-H);
-    }
-
   }
   return log_kernel;
 }
 
-vector lognormal_likelihood(int N_total, int n_quad, vector qw, matrix eta_quad,
-  matrix dt_quad, real sigma_lognormal, array[] int censored) {
+matrix lognormal_likelihood(int N_total, vector log_qw, array[] vector eta_quad, vector dt, real sigma_lognormal) {
 
-  vector[N_total] log_kernel;
-  matrix[n_quad+1,N_total] mu_lognormal_quad = eta_quad;
-  vector[N_total] mu_lognormal_end = eta_quad[n_quad+1]';
-  vector[N_total] dt = dt_quad[n_quad+1]';
-  real H;
+  matrix[N_total, 3] log_kernel;
 
-  for (n in 1:N_total) {
+  for (j in 1:3) {
+    vector[N_total] mu_lognormal = eta_quad[j];
+    for (n in 1:N_total) {
 
-    for (j in 1:n_quad) {
-      H += qw[j] * lognormal_h(dt_quad[j,n], mu_lognormal_quad[j,n], sigma_lognormal);
+        log_kernel[n, j] = log_qw[j] + lognormal_lpdf(dt[n] | mu_lognormal[n], sigma_lognormal);
+
     }
-    H *= dt[n];
-
-    if (censored[n] == 0) {
-      log_kernel[n] = lognormal_lh(dt[n], mu_lognormal_end[n], sigma_lognormal) - H;
-
-    } else if (censored[n] == 1) { // right-censored
-      log_kernel[n] = -H;
-    } else if (censored[n] == 2) { // left-censored
-      log_kernel[n] = log1m_exp(-H);
-    }
-
   }
   return log_kernel;
 }
-
 
 matrix gengamma_likelihood(int N_total, vector log_qw, array[] vector eta_quad, vector dt, real k, real shape) {
 
@@ -509,38 +371,20 @@ real get_rate_t(int ind, vector mu_ind, vector beta_ind_i,
   return exp(-eta_t[1]); // inv(exp(x)) is exp(-x)
 }
 
-
 // Numerically stable hazard functions using exp(lpdf - lccdf)
-
-real gamma_h(real dt, real k, real rate) {
-  return exp(gamma_lpdf(dt | k, rate) -
-    gamma_lccdf_safe(dt, k, rate));
-}
-real gamma_lh(real dt, real k, real rate) {
-  return gamma_lpdf(dt | k, rate) -
-    gamma_lccdf_safe(dt, k, rate);
+real exponential_h(real dt, real rate) {
+  return exp(exponential_lpdf(dt | rate) - exponential_lccdf(dt | rate));
 }
 
+real gamma_h(real dt, real shape, real rate) {
+  return exp(gamma_lpdf(dt | shape, rate) - gamma_lccdf(dt | shape, rate));
+}
 
 real weibull_h(real dt, real shape, real scale) {
-  return exp(weibull_lpdf(dt | shape, scale) -
-    weibull_lccdf(dt | shape, scale));
-}
-real weibull_lh(real dt, real shape, real scale) {
-  return weibull_lpdf(dt | shape, scale) -
-    weibull_lccdf(dt | shape, scale);
+  return exp(weibull_lpdf(dt | shape, scale) - weibull_lccdf(dt | shape, scale));
 }
 
 real lognormal_h(real dt, real mu_lognormal, real sigma_lognormal) {
-  return exp(lognormal_lpdf(dt | mu_lognormal, sigma_lognormal) -
-    lognormal_lccdf(dt | mu_lognormal, sigma_lognormal));
-}
-real lognormal_lh(real dt, real mu_lognormal, real sigma_lognormal) {
-  return lognormal_lpdf(dt | mu_lognormal, sigma_lognormal) -
-    lognormal_lccdf(dt | mu_lognormal, sigma_lognormal);
+  return exp(lognormal_lpdf(dt | mu_lognormal, sigma_lognormal) - lognormal_lccdf(dt | mu_lognormal, sigma_lognormal));
 }
 
-# known bug
-real gamma_lccdf_safe(real y, real alpha, real beta) {
-  return log(fmax(gamma_q(alpha, beta * y),1e-300));  // gamma_q = regularized upper incomplete gamma, i.e. S(y) directly
-}

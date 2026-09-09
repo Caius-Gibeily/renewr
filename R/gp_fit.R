@@ -27,8 +27,8 @@ gp_fit.list <- function(event_data, duration, group_id = "group", ind_id = "ind"
 
                        M = 40, family = c("exponential","gamma","weibull","lognormal","gengamma"),
                        kernel = c("squared_exp", "matern12","matern32","matern52","periodic"),
-                       priors = NULL, L_factor = 1.2, w0 = 0.5,
-                       chains = 4, iter = 2000, warmup = 1000, adapt_delta = 0.95, max_treedepth = 12,...) {
+                       priors = NULL, L_factor = 1.2, w0 = 0.5, n_quad = 3,
+                       chains = 4, iter = 2000, warmup = 1000, adapt_delta = 0.95, max_treedepth = 12,old=FALSE,...) {
   kernel <- match.arg(kernel)
   family <- match.arg(family)
 
@@ -43,7 +43,6 @@ gp_fit.list <- function(event_data, duration, group_id = "group", ind_id = "ind"
                       error = function(e) NULL)
   group_str <- tryCatch(rlang::as_name(rlang::ensym(group_id)),
                         error = function(e) NULL)
-
   event_times_str <- tryCatch(rlang::as_name(rlang::ensym(event_times)),
                      error = function(e) NULL)
 
@@ -51,7 +50,9 @@ gp_fit.list <- function(event_data, duration, group_id = "group", ind_id = "ind"
                     error = function(e) NULL)
 
   if (missing(duration)) {
-    duration <- events |> reframe(max_t = max(.data[[event_times_str]])) |> pull(max_t)
+    duration <- events |>
+      reframe(max_t = max(.data[[event_times_str]])) |>
+      pull(max_t)
     warning("Setting duration to the latest event time. If this is incorrect, please set duration.")
   }
 
@@ -117,9 +118,11 @@ gp_fit.list <- function(event_data, duration, group_id = "group", ind_id = "ind"
   }
 
   model_data <- list(
+    old = old,
     event_times = events |>
       pull(all_of(event_times_str)),
     traces = event_data$traces, # for simulations
+    censored = events$censored,
     group_traces = event_data$group_traces,
     global_trace = event_data$global_trace,
     events = events |> rename(ind = .data[[ind_str]],
@@ -136,7 +139,8 @@ gp_fit.list <- function(event_data, duration, group_id = "group", ind_id = "ind"
                     w0 = w0,
                     kernel = match.arg(kernel),
                     family = match.arg(family),
-                    priors = priors),
+                    priors = priors,
+                    n_quad = n_quad),
     stan_runtime = list(chains = chains,
                         iter = iter, warmup = warmup,
                         adapt_delta = adapt_delta,
@@ -162,15 +166,19 @@ gp_fit.gp_model <- function(model_data, ...) {
 
   if ("one_ind" %in% class(model_data)) {
     message("Fitting a single-individual GP model")
-    prior_frame <- parse_priors.one_ind(model_data)
+    prior_frame <- parse_priors(model_data)
     stan_obj <- stanmodels$hsgp_one_ind
   } else if ("one_group" %in% class(model_data)) {
     message("Fitting a single-group hierarchical GP model")
-    prior_frame <- parse_priors.one_group(model_data)
-    stan_obj <- stanmodels$hsgp_one_group
+    prior_frame <- parse_priors(model_data)
+    if (model_data$old) {
+      stan_obj <- stanmodels$hsgp_one_group2
+    } else {
+      stan_obj <- stanmodels$hsgp_one_group
+    }
   } else if ("multi_group" %in% class(model_data)) {
     message("Fitting a multi-group hierarchical GP model")
-    prior_frame <- parse_priors.multi_group(model_data)
+    prior_frame <- parse_priors(model_data)
     stan_obj <- stanmodels$hsgp_multi_group
   }
 
@@ -192,8 +200,10 @@ gp_fit.gp_model <- function(model_data, ...) {
     L_factor = model_data$settings$L_factor,
     w0 = model_data$settings$w0,
     duration = model_data$settings$duration,
+    n_quad = model_data$settings$n_quad,
     t_ev = model_data$event_times,
     dt = model_data$dt,
+    censored = model_data$censored,
 
     distributions = as.double(prior_frame$distribution_id),
     N_params = nrow(prior_frame),
@@ -211,6 +221,8 @@ gp_fit.gp_model <- function(model_data, ...) {
   fit <- rstan::sampling(
     object = stan_obj,
     data = stan_dat,
+    init = .build_inits(stan_dat,
+                        model_data$stan_runtime$chains),
     chains = model_data$stan_runtime$chains,
     iter = model_data$stan_runtime$iter,
     warmup = model_data$stan_runtime$warmup,
@@ -352,6 +364,35 @@ filter_data <- function(event_data, subs, by = c("ind", "group")) {
 
 }
 
+.build_inits <- function(stan_dat, n_chains) {
+  mean_dt   <- mean(stan_dat$dt)
+  median_dt <- median(stan_dat$dt)
 
+  lapply(seq_len(n_chains), function(i) {
+    list(
+      rho_group = median_dt * exp(rnorm(1, 0, 0.1)),
+      rho_ind = median_dt * exp(rnorm(1, 0, 0.1)),
+
+      alpha_group = 0.3 * exp(rnorm(1, 0, 0.1)),
+      alpha_ind = 0.3 * exp(rnorm(1, 0, 0.1)),
+
+      alpha = 0.4 * exp(rnorm(1, 0, 0.1)),
+      omega = 0.5,
+      mu_group = -log(mean_dt) + rnorm(1, 0, 0.1),
+
+      sigma_ind = 0.2,
+
+      z_group = rnorm(stan_dat$M, 0, 0.1),
+      z_ind_raw  = matrix(rnorm((stan_dat$I - 1) * stan_dat$M, 0, 0.1),
+                          nrow = stan_dat$I - 1),
+      mu_raw_ind = rnorm(stan_dat$I - 1, 0, 0.1),
+
+      k = array(1.5 + abs(rnorm(1, 0, 0.3)))
+      #shape = array(1.2 + abs(rnorm(1, 0, 0.3))),
+
+      #sigma_lognormal = array(0.5 * exp(rnorm(1, 0, 0.1)))
+    )
+  })
+}
 
 

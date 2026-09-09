@@ -51,7 +51,7 @@ simulate_events <- function(trace_data, group = group, ind = ind, family = c(
                               "exponential", "gamma", "weibull",
                               "log-normal", "gengamma"
                             ), shape = 1, k = 2, sigma = 1,
-                            Q = 0, baseline = 0, resolution = 0.005, seed = NULL) {
+                            Q = 0, baseline = 0, resolution = 0.01, seed = NULL) {
   # extract trace data from list if the object is already a list
   if (is.list(trace_data) & !is.data.frame(trace_data)) {
     traces <- trace_data$traces
@@ -231,7 +231,8 @@ simulate_events <- function(trace_data, group = group, ind = ind, family = c(
   }
 
   if (!missing(shape) && !missing(k)) {
-    events <- simulate_renewal_orig(time, modulant, shape, k)
+    events <- simulate_renewal_multi_omp(time, modulant, 1, shape, k)
+    print(events)
   } else if (!missing(sigma) && !missing(Q)) {
     events <- simulate_renewal(time, modulant, sigma, Q)
   }

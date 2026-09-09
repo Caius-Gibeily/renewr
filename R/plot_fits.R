@@ -115,7 +115,7 @@ plot.gp_model <- function(model, level = c("ind", "group", "global"), .width = c
       # ggplot2::coord_cartesian(xlim = global_x,
       #                         ylim = global_y) +
       ggplot2::theme_minimal() +
-      ggplot2::labs(x = "Time (t)", y = "Value")
+      ggplot2::labs(x = "Time (t)", y = "Modulated intensity")
 
     if (show_ci && !is.null(fit_sub) && nrow(fit_sub) > 0) {
       p <- p + ggdist::geom_lineribbon(

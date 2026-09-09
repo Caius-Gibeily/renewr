@@ -16,6 +16,7 @@ model_loo <- function(model) {
   return(loo_res)
 }
 
+#' @export
 model_compare <- function(...) {
   models <- list(...)
 

@@ -8,7 +8,7 @@ parse_priors <- function(model_setup, ...) {
 #' @export
 #' @method parse_priors one_ind
 parse_priors.one_ind <- function(model_setup) {
-  valid_variables = c("mu_ind","alpha_ind","rho_ind") %>%
+  valid_variables = c("mu_ind","alpha_ind","rho_ind") |>
     append(.get_family_priors(model_setup$settings$family))
 
   path <- system.file("extdata", "default_priors_one_ind.csv", package = "renewr")
@@ -24,7 +24,7 @@ parse_priors.one_ind <- function(model_setup) {
 #' @method parse_priors one_group
 parse_priors.one_group <- function(model_setup) {
   valid_variables = c("mu_group","alpha_group",
-                      "alpha_ind", "rho_group","rho_ind") %>%
+                      "alpha_ind", "rho_group","rho_ind") |>
     append(.get_family_priors(model_setup$settings$family))
 
   path <- system.file("extdata", "default_priors_one_group.csv", package = "renewr")
@@ -39,7 +39,7 @@ parse_priors.one_group <- function(model_setup) {
 #' @method parse_priors multi_group
 parse_priors.multi_group <- function(model_setup) {
   valid_variables = c("mu_global","alpha_global",
-                      "alpha_group","alpha_ind", "rho_global","rho_group","rho_ind") %>%
+                      "alpha_group","alpha_ind", "rho_global","rho_group","rho_ind") |>
     append(.get_family_priors(model_setup$settings$family))
 
   path <- system.file("extdata", "default_priors_multi_group.csv", package = "renewr")
@@ -85,11 +85,11 @@ parse_priors.multi_group <- function(model_setup) {
   #   k ~ exp(0.5),
   #   shape ~ exp(0.5)
   # )
-  dists <- c("normal", "lognormal", "cauchy", "exp")
+  dists <- c("normal", "lognormal", "cauchy", "invgamma", "beta","exp")
   prior_frame <- readr::read_csv(path, show_col_types = FALSE)
 
   if (missing(priors) || is.null(priors)) {
-    prior_frame <- prior_frame %>%
+    prior_frame <- prior_frame |>
       mutate(distribution_id = match(distribution,dists))
     return(prior_frame)
   }
@@ -110,10 +110,19 @@ parse_priors.multi_group <- function(model_setup) {
       stop("Supported distributions: normal, lognormal, cauchy, or exp.")
     }
 
-    dist_args <- as.list(dist_data)[-1]
-    if (any(!sapply(dist_args, is.numeric))) {
-      stop("Prior parameters must be numeric constants.")
-    }
+    dist_args <- lapply(as.list(dist_data)[-1], function(arg) {
+      val <- tryCatch(eval(arg), error = function(e) arg)
+      if (!is.numeric(val) || length(val) != 1) {
+        stop(sprintf(
+          "Prior parameter '%s' for variable '%s' must be a single numeric constant (negative values are allowed).",
+          deparse(arg), prior_variable
+        ))
+      }
+      val
+    })
+    #if (any(!sapply(dist_args, is.numeric))) {
+    #  stop("Prior parameters must be numeric constants.")
+    #}
 
     prior_frame[prior_frame$prior_variable == prior_variable, "distribution"] <- dist_name
 
@@ -124,8 +133,8 @@ parse_priors.multi_group <- function(model_setup) {
       prior_frame[prior_frame$prior_variable == prior_variable, c("param_1", "param_2")] <- dist_args
     }
   }
-  prior_frame <- prior_frame %>%
-    filter(prior_variable %in% valid_variables) %>%
+  prior_frame <- prior_frame |>
+    filter(prior_variable %in% valid_variables) |>
     mutate(distribution_id = match(distribution,dists))
   return(prior_frame)
 }

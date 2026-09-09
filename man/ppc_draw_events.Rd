@@ -4,7 +4,7 @@
 \alias{ppc_draw_events}
 \title{Generate events from prior or posterior predictive distribution of a GP model}
 \usage{
-ppc_draw_events(model, n_samples, prior = FALSE, resolution = 0.05)
+ppc_draw_events(model, n_samples, prior = FALSE, resolution = 0.1)
 }
 \arguments{
 \item{model}{gp_model. A fitted GP model or model with prior checks}

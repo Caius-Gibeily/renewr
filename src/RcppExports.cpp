@@ -39,9 +39,25 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// simulate_renewal_multi_omp
+List simulate_renewal_multi_omp(std::vector<double> time_vec, NumericVector modulant_mat_flat, int n_ind, double shape, double k);
+RcppExport SEXP _renewr_simulate_renewal_multi_omp(SEXP time_vecSEXP, SEXP modulant_mat_flatSEXP, SEXP n_indSEXP, SEXP shapeSEXP, SEXP kSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::vector<double> >::type time_vec(time_vecSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type modulant_mat_flat(modulant_mat_flatSEXP);
+    Rcpp::traits::input_parameter< int >::type n_ind(n_indSEXP);
+    Rcpp::traits::input_parameter< double >::type shape(shapeSEXP);
+    Rcpp::traits::input_parameter< double >::type k(kSEXP);
+    rcpp_result_gen = Rcpp::wrap(simulate_renewal_multi_omp(time_vec, modulant_mat_flat, n_ind, shape, k));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 RcppExport SEXP _rcpp_module_boot_stan_fit4hsgp_multi_group_mod();
 RcppExport SEXP _rcpp_module_boot_stan_fit4hsgp_one_group_mod();
+RcppExport SEXP _rcpp_module_boot_stan_fit4hsgp_one_group2_mod();
 RcppExport SEXP _rcpp_module_boot_stan_fit4hsgp_one_ind_mod();
 RcppExport SEXP _rcpp_module_boot_stan_fit4prior_pc_multi_group_mod();
 RcppExport SEXP _rcpp_module_boot_stan_fit4prior_pc_one_group_mod();
@@ -50,8 +66,10 @@ RcppExport SEXP _rcpp_module_boot_stan_fit4prior_pc_one_ind_mod();
 static const R_CallMethodDef CallEntries[] = {
     {"_renewr_simulate_renewal", (DL_FUNC) &_renewr_simulate_renewal, 4},
     {"_renewr_simulate_renewal_orig", (DL_FUNC) &_renewr_simulate_renewal_orig, 4},
+    {"_renewr_simulate_renewal_multi_omp", (DL_FUNC) &_renewr_simulate_renewal_multi_omp, 5},
     {"_rcpp_module_boot_stan_fit4hsgp_multi_group_mod", (DL_FUNC) &_rcpp_module_boot_stan_fit4hsgp_multi_group_mod, 0},
     {"_rcpp_module_boot_stan_fit4hsgp_one_group_mod", (DL_FUNC) &_rcpp_module_boot_stan_fit4hsgp_one_group_mod, 0},
+    {"_rcpp_module_boot_stan_fit4hsgp_one_group2_mod", (DL_FUNC) &_rcpp_module_boot_stan_fit4hsgp_one_group2_mod, 0},
     {"_rcpp_module_boot_stan_fit4hsgp_one_ind_mod", (DL_FUNC) &_rcpp_module_boot_stan_fit4hsgp_one_ind_mod, 0},
     {"_rcpp_module_boot_stan_fit4prior_pc_multi_group_mod", (DL_FUNC) &_rcpp_module_boot_stan_fit4prior_pc_multi_group_mod, 0},
     {"_rcpp_module_boot_stan_fit4prior_pc_one_group_mod", (DL_FUNC) &_rcpp_module_boot_stan_fit4prior_pc_one_group_mod, 0},

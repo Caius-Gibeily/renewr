@@ -9,3 +9,7 @@ simulate_renewal_orig <- function(time_vec, modulant_vec, shape, k) {
     .Call(`_renewr_simulate_renewal_orig`, time_vec, modulant_vec, shape, k)
 }
 
+simulate_renewal_multi_omp <- function(time_vec, modulant_mat_flat, n_ind, shape, k) {
+    .Call(`_renewr_simulate_renewal_multi_omp`, time_vec, modulant_mat_flat, n_ind, shape, k)
+}
+

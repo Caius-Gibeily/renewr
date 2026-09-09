@@ -3,26 +3,10 @@ functions {
 }
 
 data {
-  // model settings
-  int<lower=1> M;
-  int<lower=1> N_params;
-  array[N_params,2] real params;
-  vector[N_params] distributions;
-  int<lower=1, upper=5> kernel;
-  int<lower=1, upper=5> family;
 
-  real<lower=0> L_factor;
-  real<lower=0> w0;
+#include include/data.stan
 
-  int<lower=0, upper=N_params> include_k;
-  int<lower=0, upper=N_params> include_shape;
-  int<lower=0, upper=N_params> include_sigma_lognormal;
-
-  // data
-  int<lower=1> N_total;
   int<lower=1> I;
-
-
   array[N_total] int<lower=1,upper=I> ind_id;
 
   int<lower=1> G;
@@ -30,47 +14,11 @@ data {
   array[I] int<lower=1,upper=G> g_membership;
   array[G] int I_per_group;
 
-  vector[N_total] t_ev;
-  vector[N_total] dt;
-
-
 }
 
 transformed data {
 
-  real L = L_factor * max(t_ev);
-
-  // 3-point Gauss-Legendre quadrature
-  vector[3] qx =
-    [0.1127016654,
-     0.5,
-     0.8872983346]';
-
-  vector[3] qw =
-    [5.0 / 18.0,
-     8.0 / 18.0,
-     5.0 / 18.0]';
-
-  vector[3] log_qw = log(qw);
-
-  // precompute basis matrices
-  array[3] matrix[N_total, M] PHI_quad;
-
-  if (kernel != 5) {
-    for (j in 1:3) {
-
-      vector[N_total] t_quad = t_ev - (1.0 - qx[j]) .* dt;
-
-      PHI_quad[j] = phi(N_total,M,L,t_quad);
-    }
-  } else {
-    for (j in 1:3) {
-
-      vector[N_total] t_quad = t_ev - (1.0 - qx[j]) .* dt;
-
-      PHI_quad[j] = phi_periodic(N_total,M,w0,t_quad);
-    }
-  }
+#include include/transformed_data.stan
 
   matrix[G,G-1] Q_R = qr_decomp(G);
 
@@ -186,28 +134,20 @@ model {
   if (include_sigma_lognormal != 0) apply_prior_lp(sigma_lognormal[1], distributions[include_sigma_lognormal],
     params[include_sigma_lognormal, 1], params[include_sigma_lognormal, 2]);
 
-  array[3] vector[N_total] eta_quad;
+  matrix[n_quad+1,N_total] eta_quad;
 
-  for (j in 1:3) {
+  for (j in 1:n_quad+1) {
     vector[N_total] f_global = PHI_quad[j] * beta_global;
     vector[N_total] f_group = rows_dot_product(PHI_quad[j], beta_group[g_id, ]);
     vector[N_total] f_ind = rows_dot_product(PHI_quad[j], beta_ind[ind_id, ]);
 
-
-    eta_quad[j] = mu_ind[ind_id] + f_global + f_group + f_ind;
+    vector[N_total] f_aggregated = mu_ind[ind_id] + f_global + f_group + f_ind;
+    eta_quad[j] = f_aggregated';
   }
 
-  matrix[N_total, 3] log_kernel;
+#include include/log-likelihood.stan
+  target += sum(log_kernel);
 
-  if (family == 1) log_kernel = exponential_likelihood(N_total, log_qw, eta_quad, dt);
-  else if (family == 2) log_kernel = gamma_likelihood(N_total, log_qw, eta_quad, dt, k[1]);
-  else if (family == 3) log_kernel = weibull_likelihood(N_total, log_qw, eta_quad, dt, shape[1]);
-  else if (family == 4) log_kernel = lognormal_likelihood(N_total, log_qw, eta_quad, dt, sigma_lognormal[1]);
-  else if (family == 5) log_kernel = gengamma_likelihood(N_total, log_qw, eta_quad, dt, k[1], shape[1]);
-
-  for (n in 1:N_total) {
-    target += log_sum_exp(log_kernel[n, ]);
-  }
 }
 
 
@@ -215,27 +155,18 @@ generated quantities {
 
   // Log likelihood computation
   vector[N_total] log_lik;
-  array[3] vector[N_total] eta_quad;
 
-  for (j in 1:3) {
+  matrix[n_quad+1,N_total] eta_quad;
+
+  for (j in 1:n_quad+1) {
     vector[N_total] f_global = PHI_quad[j] * beta_global;
     vector[N_total] f_group = rows_dot_product(PHI_quad[j], beta_group[g_id, ]);
     vector[N_total] f_ind = rows_dot_product(PHI_quad[j], beta_ind[ind_id, ]);
 
-
-    eta_quad[j] = mu_ind[ind_id] + f_global + f_group + f_ind;
+    vector[N_total] f_aggregated = mu_ind[ind_id] + f_global + f_group + f_ind;
+    eta_quad[j] = f_aggregated';
   }
 
-  matrix[N_total, 3] log_kernel;
-
-  if (family == 1)      log_kernel = exponential_likelihood(N_total, log_qw, eta_quad, dt);
-  else if (family == 2) log_kernel = gamma_likelihood(N_total, log_qw, eta_quad, dt, k[1]);
-  else if (family == 3) log_kernel = weibull_likelihood(N_total, log_qw, eta_quad, dt, shape[1]);
-  else if (family == 4) log_kernel = lognormal_likelihood(N_total, log_qw, eta_quad, dt, sigma_lognormal[1]);
-  else if (family == 5) log_kernel = gengamma_likelihood(N_total, log_qw, eta_quad, dt, k[1], shape[1]);
-  else reject("Invalid family specified: ", family);
-
-    for (n in 1:N_total) {
-    log_lik[n] = log_sum_exp(log_kernel[n, ]);
-  }
+#include include/log-likelihood.stan
+  log_lik = log_kernel;
 }
