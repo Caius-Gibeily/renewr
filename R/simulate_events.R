@@ -41,179 +41,224 @@
 #' @returns An object of class `sim_events` containing all data from `sim_traces` object,
 #' if passed, renewal process simulation parameters and simulated event data.
 #' @examples
-#' gp_traces <- simulate_gp_traces(n_ind = 5, alpha_group = 0.5, rho_group = 10,
-#' seed = 123)
+#' gp_traces <- simulate_gp_traces(
+#'   n_ind = 5, alpha_group = 0.5, rho_group = 10,
+#'   seed = 123
+#' )
 #' events <- simulate_events(gp_traces, family = "weibull")
 #' plot(events)
 
 #' @export
-simulate_events <- function(trace_data, group = group, ind = ind, family = c(
-                              "exponential", "gamma", "weibull",
-                              "log-normal", "gengamma"
-                            ), shape = 1, k = 2, sigma = 1,
-                            Q = 0, baseline = 0, resolution = 0.01, seed = NULL) {
-  # extract trace data from list if the object is already a list
-  if (is.list(trace_data) & !is.data.frame(trace_data)) {
-    traces <- trace_data$traces
-  } # else, extract trace from dataframe and convert to a list container
-  else if (is.data.frame(trace_data)) {
+simulate_events <- function(
+  trace_data, group = group, ind = ind, family = c("exponential", "gamma", "weibull",
+                                                   "log-normal", "gengamma"),
+  shape = 1, k = 2,sigma = 1, Q = 0,resolution = 0.01, seed_events = NULL) {
+  if ("sim_traces" %in% class(trace_data)) {
+    traces <- trace_data$traces$ind_traces
+  } else if (is.data.frame(trace_data)) {
     traces <- trace_data
     trace_data <- list(traces = traces)
   }
+  # for subsequent compatibility
+  traces <- rename(traces,
+    ind = ind,
+    group = group
+  )
 
-  if (is.null(seed)) {
-    if (!is.null(trace_data$sim_parameters$seed_traces)) {
-      seed <- trace_data$sim_parameters$seed_traces
-      set.seed(seed)
-      warning("Setting seed to the one set in trace simulation. If this is unintended, please set seed in simulate_events().")
-    } else {
-      set.seed(seed)
-    }
-  } else {
-    set.seed(seed)
-  }
+  set.seed(seed_events)
 
-  trace_data$sim_parameters$seed_events <- seed
-  trace_data$sim_parameters$family <- family
+  trace_data$sim_params$seed_events <- seed_events
+  trace_data$sim_params$family <- family
 
-  sim_struct <- trace_data$traces <- traces |>
-    group_by({{ group }}, {{ ind }}) |>
-    group_keys()
+  sim_struct <- unique(traces[c("ind", "group")])
+
   n_ind <- nrow(sim_struct)
-  n_group <- unique(sim_struct$group) |> length()
-  if (length(baseline) == 1) {
-    # if a global mu offset is specified, translate all traces by this fixed value
+  n_group <- max(unique(sim_struct$group))
 
-    traces <- trace_data$traces <- traces |>
-      mutate(
-        y_offset = y + baseline,
-        scale = 1 / exp(-(y_offset))
-      )
-    if (!is.null(trace_data$group_traces)) {
-      # if the group trace is also present (multi-ind or multi-group models), add baseline to group traces
-      trace_data$group_traces <- trace_data$group_traces |>
-        mutate(y_offset = y + baseline)
-    }
-    if (!is.null(trace_data$global_traces)) {
-      # if the global trace is also present (multi-group model), add baseline to group traces
-      trace_data$global_trace <- trace_data$global_trace |>
-        mutate(y_offset = y + baseline)
+  # acquire scale
 
-      trace_data$sim_parameters$mu_global <- baseline
-    }
-
-    mu_inds <- as.list(setNames(rep(baseline, n_ind), paste0("mu_ind[", sim_struct$ind, "]")))
-    mu_groups <- as.list(setNames(
-      rep(baseline, n_group),
-      paste0(
-        "mu_group[",
-        unique(sim_struct$group), "]"
-      )
-    ))
-  } else if (length(baseline) == n_ind) {
-    # if the number of offsets supplied equals the number of individuals, add each
-    # separately to each individual
-    traces <- trace_data$traces <- traces |>
-      group_by(ind) |>
-      mutate(
-        y_offset = y + baseline[ind],
-        scale = exp(y_offset)
-      ) |>
-      dplyr::ungroup()
-
-    # group baselines
-    baseline_groups <- sim_struct |>
-      dplyr::bind_cols(baseline = baseline) |>
-      group_by(group) |>
-      summarise(baseline = mean(baseline)) |>
-      dplyr::pull(baseline)
-
-    trace_data$group_traces <- trace_data$group_traces |>
-      group_by(group) |>
-      mutate(y_offset = y + baseline_groups[group]) |>
-      dplyr::ungroup()
-
-    mu_inds <- as.list(setNames(baseline, paste0("mu_ind[", sim_struct$ind, "]")))
-    mu_groups <- as.list(setNames(
-      baseline_groups,
-      paste0(
-        "mu_group[",
-        unique(sim_struct$group), "]"
-      )
-    ))
-
-    if (!is.null(trace_data$global_trace)) {
-      baseline_global <- mean(baseline)
-
-      trace_data$global_trace <- trace_data$global_trace |>
-        mutate(y_offset = y + baseline_global)
-
-      trace_data$sim_parameters$mu_global <- baseline_global
-    }
-  } else {
-    stop("Please ensure a single baseline offset or a number of baseline offsets equal to the number of individuals")
-  }
-
-  trace_data$sim_parameters <- trace_data$sim_parameters |>
-    append(c(mu_inds, mu_groups))
-
+  traces$scale <- exp(traces$eta)
+  traces$rate <- 1 / traces$scale
 
   if (family != "log-normal") {
     if (family == "exponential") {
       shape <- k <- 1
     } else if (family == "gamma") {
       shape <- 1
-    } else if (family == "weibull") k <- 1
+    } else if (family == "weibull") {
+      k <- 1
+    }
+  }
 
-    event_times <- traces |>
-      group_split(ind) |>
-      map(\(x) .simulate_renewal(x,
-        modulant = scale,
-        shape = shape, k = k, resolution = resolution
-      )) |>
-      list_rbind(names_to = "ind") |>
-      mutate(ind = as.factor(ind)) |>
-      left_join(sim_struct, by = "ind") |>
-      relocate(group, .after = ind)
+  trace_data$sim_params$survival_params <- list(
+    shape = shape,
+    k = k
+  )
 
-    trace_data$sim_parameters <- trace_data$sim_parameters |>
-      append(list(`shape[1]` = shape, `k[1]` = k))
-  } else if (family == "log-normal") {
-    if (is.null(mu)) {
-      traces <- traces |>
-        mutate(mu = log(scale) + log(k) / sqrt(shape))
+  ind_ids <- sim_struct$ind
+
+  n_samples <- max(length(shape), length(k))
+  use_samples <- n_samples > 1
+
+  shape_vec <- rep_len(shape, n_samples)
+  k_vec <- rep_len(k, n_samples)
+
+  max_t <- if (!is.null(trace_data$sim_params$duration)) {
+    trace_data$sim_params$duration
+  } else {
+    max(traces$t)
+  }
+
+  time_vec <- seq(0, max_t, by = resolution)
+  n_time <- length(time_vec)
+
+  traces_have_samples <- "sample" %in% names(traces)
+
+  if (traces_have_samples) {
+    sample_ids <- sort(unique(traces$sample))
+
+    if (use_samples && length(sample_ids) != n_samples) {
+      stop(
+        "Number of unique `sample` values in traces (", length(sample_ids),
+        ") does not match n_samples inferred from shape/k (", n_samples, ")."
+      )
+    }
+    if (!use_samples && length(sample_ids) > 1) {
+      stop(
+        "traces contains multiple `sample` values but shape/k were supplied ",
+        "as scalars -- please supply per-sample shape/k, or collapse traces ",
+        "to a single sample before calling simulate_events()."
+      )
     }
 
-    event_times <- traces |>
-      group_split(ind) |>
-      map(\(x) .simulate_renewal(x,
-        modulant = mu,
-        sigma = sigma, Q = 0, resolution = resolution
-      )) |>
-      list_rbind(names_to = "ind") |>
-      mutate(ind = as.factor(ind)) |>
-      left_join(sim_struct, by = "ind") |>
-      relocate(group, .after = ind)
-  } else {
-    stop(
-      "Please choose a survival function from ",
-      "exponential, gamma, weibull, log-normal, gengamma"
+
+    traces_split <- split(traces,
+      list(traces$sample, traces$ind),
+      sep = "___"
     )
+    ind_scale_by_sample <- lapply(sample_ids, function(s) {
+      vapply(ind_ids, function(i) {
+        key <- paste(s,i, sep = "___")
+        tr <- traces_split[[key]]
+        if (is.null(tr)) {
+          stop(
+            "No trace rows found for sample = ", s,
+            ", ind = ", i, "."
+          )
+        }
+        #tr <- tr[order(tr$t), ]
+        stats::approx(tr$t, tr$scale, xout = time_vec, rule = 2)$y
+      }, FUN.VALUE = numeric(n_time))
+    })
+
+    modulant_mat_flat <- as.vector(do.call(cbind, ind_scale_by_sample))
+
+  } else {
+    traces_split <- split(traces, traces$ind)
+
+    ind_scale_mat <- vapply(ind_ids, function(i) {
+      tr <- traces_split[[as.character(i)]]
+      tr <- tr[order(tr$t), ]
+      stats::approx(tr$t, tr$scale, xout = time_vec, rule = 2)$y
+    }, FUN.VALUE = numeric(n_time))
+
+    modulant_mat_flat <- if (use_samples) {
+      rep(as.vector(ind_scale_mat), times = n_samples)
+    } else {
+      as.vector(ind_scale_mat)
+    }
   }
+
+  group_levels <- unique(sim_struct$group)
+  groups_vec <- match(sim_struct$group, group_levels)
+
+
+  # Parallel C++ loop
+  events_raw <- simulate_renewal_flexible(
+    time_vec = time_vec,
+    modulant_mat_flat = modulant_mat_flat,
+    groups_vec = as.integer(groups_vec),
+    shape_vec = as.numeric(shape_vec),
+    k_vec = as.numeric(k_vec),
+    n_ind = n_ind,
+    n_samples = n_samples,
+    max_x = max_t,
+    use_samples = use_samples,
+    start_time = - 0.1 * max_t)
+
+  events <- events_raw |>
+    dplyr::mutate(
+      ind   = ind_ids[ind],
+      group = group_levels[group]
+    )
+  ## Determine censoring
+  if (!use_samples) {
+
+    events <- events |>
+      dplyr::group_by(ind) |>
+      dplyr::group_modify(\(ev_i, y) {
+        current_group_val <- ev_i$group[1]
+        ev_i |> dplyr::mutate(
+          dt = diff(c(0, event_times)),
+          censored = c(rep(0, length(event_times) - 1), 1)
+        )
+      }) |>
+      ungroup()
+  }
+
+
+  if (use_samples) {
+    events <- events |> dplyr::relocate(sample, .before = ind)
+  }
+
+  trace_data$events <- events
+  trace_data
+
+
   if (is.list(trace_data)) {
     sim_data <- trace_data %>% append(
-      list(events = event_times)
+      list(events = events)
     )
     class(sim_data) <- c("sim_traces", class(sim_data))
   } else {
     sim_data <- list(
       traces = trace_data,
-      events = event_times
+      events = events
     )
   }
   class(sim_data) <- c("sim_events", class(sim_data))
   return(sim_data)
 }
+
+.interp_points <- function(df, resolution, id, time, y) {
+  t_old <- unique(df[[time]])
+  new_times <- seq(min(t_old), max(t_old), length.out = max(t_old) * 1 / resolution)
+
+  interp_list <- by(df, df[[id]], function(sub_df) {
+    interp <- approx(
+      x = sub_df[[time]],
+      y = sub_df[[y]],
+      xout = new_times
+    )
+
+    res_df <- data.frame(
+      id = sub_df[[id]][1],
+      t = interp$x,
+      scale = interp$y
+    )
+
+
+    names(res_df) <- c(id, time, y)
+    return(res_df)
+  })
+
+  interp_df <- do.call(rbind, interp_list)
+
+  rownames(interp_df) <- NULL
+
+  return(interp_df)
+}
+
 
 #' @noRd
 .simulate_renewal <- function(trace, modulant, shape, k, sigma, Q, resolution = 200) {
@@ -231,8 +276,7 @@ simulate_events <- function(trace_data, group = group, ind = ind, family = c(
   }
 
   if (!missing(shape) && !missing(k)) {
-    events <- simulate_renewal_multi_omp(time, modulant, 1, shape, k)
-    print(events)
+    events <- simulate_renewal_multi_parallel(time, modulant, 1, shape, k)
   } else if (!missing(sigma) && !missing(Q)) {
     events <- simulate_renewal(time, modulant, sigma, Q)
   }

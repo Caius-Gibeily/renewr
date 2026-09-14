@@ -22,7 +22,7 @@
 #'
 #' @export
 #' @method plot sim_traces
-plot.sim_traces <- function(sim_data, level = c("individual", "group", "global"),
+plot.sim_traces <- function(sim_data, level = c("ind", "group", "global"),
                             facet = TRUE, width = 0.1,
                             height = 0.2, size = 10) {
   if (!requireNamespace("patchwork", quietly = TRUE)) {
@@ -32,26 +32,11 @@ plot.sim_traces <- function(sim_data, level = c("individual", "group", "global")
   plots_list <- list()
   level <- match.arg(level, several.ok = TRUE)
 
-  ind_data <- sim_data$traces
-  grp_data <- sim_data$group_traces
+  ind_data <- sim_data$traces$ind_traces
+  group_data <- sim_data$traces$group_traces
+  global_data <- sim_data$traces$global_trace
 
-  if (!is.null(sim_data$global_trace)) {
-    global_data <- sim_data$global_trace
 
-  } else if (!is.null(grp_data)) {
-
-    x_col <- if ("x" %in% names(grp_data)) "x" else "time"
-    y_col <- if ("y_offset" %in% names(grp_data)) "y_offset" else "y"
-
-    global_data <- grp_data |>
-      dplyr::group_by(.data[[x_col]]) |>
-      dplyr::summarise(y = mean(.data[[y_col]], na.rm = TRUE),
-                       .groups = "drop") |>
-      dplyr::rename(x = 1)
-  } else {
-    global_data <- NULL
-  }
-  print(global_data)
   event_data <- NULL
   if ("sim_events" %in% class(sim_data) && !is.null(sim_data$events)) {
     event_data <- sim_data$events
@@ -65,14 +50,14 @@ plot.sim_traces <- function(sim_data, level = c("individual", "group", "global")
       theme_minimal() +
       labs(x = "Time (t)", y = "Eta(t)")
 
-    if ("individual" %in% level && !is.null(ind_sub) && nrow(ind_sub) > 0) {
-      i_x <- if ("x" %in% names(ind_sub)) "x" else "time"
-      i_y <- if ("y_offset" %in% names(ind_sub)) "y_offset" else "y"
+    if ("ind" %in% level && !is.null(ind_sub) && nrow(ind_sub) > 0) {
+      i_x <- "t"
+      i_y <- "eta"
 
       p <- p + geom_line(
         data = ind_sub,
         aes(
-          x = .data[[i_x]], y = .data[[i_y]], group = interaction(group, ind),
+          x = .data[[i_x]], y = .data[[i_y]], group = ind,
           color = as.factor(ind)
         ), alpha = 0.6, linewidth = 0.5
       ) +
@@ -80,8 +65,8 @@ plot.sim_traces <- function(sim_data, level = c("individual", "group", "global")
     }
 
     if ("group" %in% level && !is.null(grp_sub) && nrow(grp_sub) > 0) {
-      g_x <- "x"
-      g_y <- if ("y_offset" %in% names(grp_sub)) "y_offset" else "y"
+      g_x <- "t"
+      g_y <- "eta"
 
       p <- p + geom_line(
         data = grp_sub,
@@ -92,8 +77,8 @@ plot.sim_traces <- function(sim_data, level = c("individual", "group", "global")
     }
 
     if ("global" %in% level && !is.null(global_data) && nrow(global_data) > 0) {
-      gl_x <- "x"
-      gl_y <- if ("y_offset" %in% names(global_data)) "y_offset" else "y"
+      gl_x <- "t"
+      gl_y <- "eta"
 
       p <- p + geom_line(
         data = global_data,
@@ -108,15 +93,9 @@ plot.sim_traces <- function(sim_data, level = c("individual", "group", "global")
 
     if (!is.null(ev_sub) && nrow(ev_sub) > 0) {
       p_below <- ggplot(
-        data = ev_sub,
-        aes(
-          x = event_times,
-          y = factor(ind),
-          group = interaction(ind, group),
-          color = interaction(ind, group),
-          fill = interaction(ind, group)
-        )
-      ) +
+        data = ev_sub |> filter(censored != 1),
+        aes(x = event_times,y = factor(ind),group = interaction(ind, group),
+            color = interaction(ind, group),fill = interaction(ind, group))) +
         geom_tile(width = width, height = height) +
         scale_color_viridis_d(guide = "none") +
         scale_fill_viridis_d(guide = "none") +
@@ -135,12 +114,13 @@ plot.sim_traces <- function(sim_data, level = c("individual", "group", "global")
   unique_groups <- unique(ind_data$group)
 
   if (!facet) {
-    p <- build_base_plot(ind_data, grp_data, event_data, title_suffix = "Simulation Traces (All Layered)")
-    return(p)
+    p <- build_base_plot(ind_data, group_data,
+                         event_data)
+
   } else {
     for (g in unique_groups) {
-      i_sub <- ind_data |> dplyr::filter(group == g)
-      g_sub <- grp_data |> dplyr::filter(group == g)
+      i_sub <- ind_data[ind_data$group == g,]
+      g_sub <- group_data[group_data$group == g,]
 
       ev_sub <- NULL
       if (!is.null(event_data)) {

@@ -188,7 +188,7 @@ simulate_boxcar_traces <- function(duration = 100, n_ind = 10, n_groups = 1,
 #' plot(gp_traces)
 #'
 #' @export
-simulate_gp_traces <- function(duration = 100, n_groups = 1, n_ind = 10,
+simulate_gp_traces_old <- function(duration = 100, n_groups = 1, n_ind = 10,
                                      kernel = "squared_exp",
                                      alpha_global = 0.5, rho_global = duration / 2,
                                      alpha_group = 0.5, rho_group = duration / 2,

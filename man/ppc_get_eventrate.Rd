@@ -12,7 +12,8 @@ ppc_get_eventrate(
   palette = "Purples",
   return_plot = TRUE,
   n_samples = 1000,
-  prior = FALSE
+  prior = FALSE,
+  ...
 )
 }
 \arguments{
@@ -44,6 +45,8 @@ parameters means this ceiling is 4000 samples.}
 
 \item{prior}{Boolean. Plot prior estimates, if available, instead of posterior estimates.
 The default is \code{FALSE}}
+
+\item{...}{Optional plotting arguments.}
 }
 \value{
 Either a ggplot or a list of observed

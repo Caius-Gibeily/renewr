@@ -29,9 +29,10 @@ parameters {
 
   // Individual-level
   real<lower=0> rho_ind;
-  //real<lower=0> alpha_ind;
-  real<lower=0> alpha;
-  real<lower=0,upper=1>omega;
+
+  real<lower=0> alpha_ind;
+  real<lower=0> alpha_group;
+
 
   // indect intercept
   //vector[I] mu;
@@ -44,7 +45,7 @@ parameters {
 
   vector<lower=1>[include_k ? 1 : 0] k;
   vector<lower=1>[include_shape ? 1 : 0] shape;
-  vector<lower=0>[include_sigma_lognormal ? 1 : 0] sigma_lognormal;
+  vector<lower=1>[include_sigma_lognormal ? 1 : 0] sigma_lognormal;
 
 
 }
@@ -56,8 +57,6 @@ transformed parameters {
 
   matrix[I,M] z_ind;
 
-  real alpha_group = alpha * sqrt(omega);
-  real alpha_ind = alpha * sqrt(1 - omega);
   //real k = 1.0 + exp(log_k_minus1);
   vector[M] diag_S_group;
   vector[M] diag_S_ind;
@@ -86,12 +85,12 @@ model {
   mu_raw_ind ~ std_normal();
   sigma_ind ~ normal(0.5,0.2);
 
-  omega ~ beta(6,4);
+  //omega ~ beta(2,2);
 
   apply_prior_lp(mu_group, distributions[1], params[1, 1], params[1, 2]);
 
-  apply_prior_lp(alpha, distributions[2], params[2, 1], params[2, 2]);
-  //apply_prior_lp(alpha_ind, distributions[3], params[3, 1], params[3, 2]);
+  apply_prior_lp(alpha_group, distributions[2], params[2, 1], params[2, 2]);
+  apply_prior_lp(alpha_ind, distributions[3], params[3, 1], params[3, 2]);
 
   apply_prior_lp(rho_group, distributions[4], params[4, 1], params[4, 2]);
   apply_prior_lp(rho_ind, distributions[5], params[5, 1], params[5, 2]);

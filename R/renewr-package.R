@@ -10,7 +10,6 @@
 #' @import Rcpp
 #' @import dplyr
 #' @import tidyr
-#' @import rstan
 #' @import purrr
 #' @import rkriging
 #' @import tibble
@@ -20,6 +19,8 @@
 #' @import ggdist
 #' @import patchwork
 #' @import loo
+#' @importFrom rstan sampling rstan_options extract
+#' @importFrom data.table CJ
 #' @importFrom cowplot plot_grid
 #' @importFrom RColorBrewer brewer.pal
 #' @importFrom MASS mvrnorm

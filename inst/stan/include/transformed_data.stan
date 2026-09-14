@@ -1,5 +1,5 @@
 
-real L = L_factor * duration;
+real L = L_factor * duration / 2;
 
 // n-point Gauss-Legendre quadrature
 vector[n_quad+1] qx = get_qx(n_quad);
@@ -18,7 +18,7 @@ if (kernel != 5) {
   for (j in 1:n_quad+1) {
     dt_quad[j] = dt' * qx[j]; //t_ev - (1.0 - qx[j]) .* dt;
     t_quad = t_ev - dt + dt_quad[j]';
-    PHI_quad[j] = phi(N_total,M,L,t_quad);
+    PHI_quad[j] = phi(N_total,M,L,duration,t_quad);
   }
 
 } else {

@@ -33,13 +33,13 @@ data {
 }
 
 transformed data {
-  real L = L_factor * duration;
+  real L = L_factor * duration / 2;
   vector[100] t_grid = linspaced_vector(100, 0, duration);
   matrix[100, M] PHI;
   if (kernel != 5) {
-    PHI = phi(100, M, L, t_grid);
+    PHI = phi(100, M, L, duration, t_grid);
   } else {
-    PHI = phi(100, M, w0, t_grid);
+    PHI = phi(100, M, w0, duration, t_grid);
   }
   matrix[G,G-1] Q_R = qr_decomp(G);
 }

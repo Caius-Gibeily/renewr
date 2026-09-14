@@ -73,12 +73,12 @@ plot.gp_model <- function(model, level = c("ind", "group", "global"), .width = c
   )
 
   if (rescale) {
-    scale_factor <- switch(model$sim_parameters$family,
+    scale_factor <- switch(model$sim_params$family,
       "exponential" = 1,
-      "gamma" = model$sim_parameters$`k[1]`,
-      "weibull" = gamma(1 + (1 / model$sim_parameters$`shape[1]`)),
-      "gengamma" = gamma((model$sim_parameters$`k[1]` + 1) / model$sim_parameters$`shape[1]`) /
-        gamma(model$sim_parameters$`k[1]` / model$sim_parameters$`shape[1]`)
+      "gamma" = model$sim_params$survival_params$k,
+      "weibull" = gamma(1 + (1 / model$sim_params$survival_params$shape)),
+      "gengamma" = gamma((model$sim_params$survival_params$k + 1) / model$sim_params$shape) /
+        gamma(model$sim_params$`k[1]` / model$sim_params$survival_params$shape)
     )
   } else {
     scale_factor <- 1
@@ -138,7 +138,7 @@ plot.gp_model <- function(model, level = c("ind", "group", "global"), .width = c
     if (show_traces && !is.null(trace_sub) && nrow(trace_sub) > 0) {
       p <- p + ggplot2::geom_line(
         data = trace_sub,
-        ggplot2::aes(x = x, y = y_offset + log(scale_factor), group = .data[[facet_var]]),
+        ggplot2::aes(x = t, y = eta + log(scale_factor), group = .data[[facet_var]]),
         inherit.aes = FALSE, linewidth = 0.7, color = "black", alpha = 0.5
       )
     }

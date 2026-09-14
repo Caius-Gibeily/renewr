@@ -6,7 +6,7 @@
 \usage{
 \method{plot}{sim_traces}(
   sim_data,
-  level = c("individual", "group", "global"),
+  level = c("ind", "group", "global"),
   facet = TRUE,
   width = 0.1,
   height = 0.2,

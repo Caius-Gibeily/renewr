@@ -51,10 +51,16 @@ ppc_plot_all <- function(model, n_samples = 1000, palette = "Blues",prior=FALSE,
 #' @seealso [draw_traces()], [ppc_get_eventrate()], [ppc_get_interevent_dist()],
 #' [ppc_get_inst_eventrate().
 #' @export
-ppc_draw_events <- function(model, n_samples, prior = FALSE, resolution = 0.1) {
+ppc_draw_events <- function(model = NULL, sampled_traces = NULL, n_samples, prior = FALSE, resolution = 0.1) {
 
-  ppc_data <- draw_traces(model, n_samples = n_samples, prior = prior,
-                           resolution = resolution)
+  if (is.null(sampled_traces) && is.null(model)) {
+    stop("Please provide either posterior generated events or a fitted renewr model")
+  } else if (is.null(sampled_traces)) {
+    ppc_data <- draw_traces(model, n_samples = n_samples, prior = prior,
+                            resolution = resolution)
+  } else ppc_data <- sampled_traces
+
+
   samples <- ppc_data$sampled_traces
   params <- ppc_data$survival_params
 
@@ -70,17 +76,14 @@ ppc_draw_events <- function(model, n_samples, prior = FALSE, resolution = 0.1) {
     "exponential"
   }
 
-  ppc_events <- samples |> group_split(sample) |>
-    imap(\(samp,i) {
-      ppc <- do.call(simulate_events,
-                         c(list(trace_data = samp, family = family, resolution = NULL),
-                                lapply(params, function(mat) mat[i])))
-      ppc$events}
-      ) |>
-    list_rbind(names_to = "sample")
+  ppc_events <-  do.call(simulate_events,
+                         c(list(trace_data = samples, family = family, resolution = 0.1),
+                                params))
 
-  return(ppc_events)
+
+  return(ppc_events$events)
 }
+
 
 #' Plot overall event rate from prior or posterior predictive distribution
 #' @inheritParams ppc_plot_all
@@ -94,10 +97,10 @@ ppc_draw_events <- function(model, n_samples, prior = FALSE, resolution = 0.1) {
 #' overall blink rates per individual and blink rate distributions via PPC.
 #' @seealso [ppc_get_interevent_dist()], [ppc_get_inst_eventrate()], [ppc_plot_all()].
 #' @export
-ppc_get_eventrate <- function(model,ppc_events=NULL,scale_factor=1,.width=c(0.5,0.8,0.99),
-                              palette = "Purples",return_plot=TRUE, n_samples=1000, prior = FALSE) {
+ppc_get_eventrate <- function(model = NULL,ppc_events=NULL,scale_factor=1,.width=c(0.5,0.8,0.99),
+                              palette = "Purples",return_plot=TRUE, n_samples=1000, prior = FALSE,...) {
   if (is.null(ppc_events)) {
-    ppc_events <- ppc_draw_events(model,n_samples = n_samples, prior = prior)
+    ppc_events <- ppc_draw_events(model,n_samples = n_samples, prior = prior,...)
   }
 
   br_global <- model$events |>
@@ -203,7 +206,7 @@ ppc_get_interevent_dist <- function(model = NULL, ppc_events = NULL, n_samples =
 #' @returns A ggplot or a list of data
 #' @seealso [ppc_get_interevent_dist()], [ppc_get_eventrate()], [ppc_plot_all()].
 #' @export
-ppc_get_inst_eventrate <- function(model,ppc_events = NULL,
+ppc_get_inst_eventrate <- function(model = NULL,ppc_events = NULL,
                                        bw_rate = 8,resolution = 0.01, n_samples = 1000,
                                    .width = c(0.5,0.8,0.99), return_plot = TRUE,
                                    palette = "Purples",show_events=TRUE, prior = FALSE) {
@@ -214,7 +217,7 @@ ppc_get_inst_eventrate <- function(model,ppc_events = NULL,
     ppc_events <- ppc_draw_events(model,n_samples = n_samples, prior = prior)
   }
 
-  time_grid <- seq(0,model$settings$duration,
+  time_grid <- seq(0,max(ppc_events$event_times),
                    by = resolution)
 
   inst_rate_ppc <- ppc_events |>

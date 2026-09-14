@@ -13,9 +13,8 @@ simulate_events(
   k = 2,
   sigma = 1,
   Q = 0,
-  baseline = 0,
   resolution = 0.01,
-  seed = NULL
+  seed_events = NULL
 )
 }
 \arguments{
@@ -49,6 +48,11 @@ smooth}
 parameter, alongside location parameter, mu (modelled as a time-varying smooth) and scale,
 sigma.}
 
+\item{resolution}{Numeric. Time grid resolution for approximating the cumulative
+hazard function. By default, linear interpolation is performed at a resolution of 0.005.
+If the passed traces are already sufficiently time resolved, \code{resolution = NULL}
+may be passed to skip linear interpolation.}
+
 \item{baseline}{Numeric or numeric vector. The vertical offset or \eqn{\mu} to apply to simulated
 traces. If one value is supplied, the same baseline is applied to all individuals.
 If the length of a passed vector baseline inputs equals the number of groups,
@@ -56,11 +60,6 @@ individual traces in each group will be adjusted by the respective value in the 
 passed. Conversely, if the length equals the total number of individuals, each individual
 trace will be translated by the respective value in the order of baselines passed and
 order of individual IDs. # note: ensure this is correct}
-
-\item{resolution}{Numeric. Time grid resolution for approximating the cumulative
-hazard function. By default, linear interpolation is performed at a resolution of 0.005.
-If the passed traces are already sufficiently time resolved, \code{resolution = NULL}
-may be passed to skip linear interpolation.}
 
 \item{seed}{Numeric. Set a seed for reproducibility. If one is not specified
 but seed was specified during trace simulation via the simulate_*_traces functions,
@@ -74,8 +73,10 @@ if passed, renewal process simulation parameters and simulated event data.
 A short description...
 }
 \examples{
-gp_traces <- simulate_gp_traces(n_ind = 5, alpha_group = 0.5, rho_group = 10,
-seed = 123)
+gp_traces <- simulate_gp_traces(
+  n_ind = 5, alpha_group = 0.5, rho_group = 10,
+  seed = 123
+)
 events <- simulate_events(gp_traces, family = "weibull")
 plot(events)
 }

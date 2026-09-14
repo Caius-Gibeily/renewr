@@ -8,7 +8,9 @@ get_nlpd <- function(model, level = "ind", resolution = 0.1,
 
   summary_traces <- summarise_traces(model,
     level = level, prior = prior,
-    dev_only = dev_only, resolution = resolution, rescale = rescale
+    dev_only = dev_only,
+    resolution = resolution,
+    rescale = rescale
   )
 
 
@@ -18,12 +20,12 @@ get_nlpd <- function(model, level = "ind", resolution = 0.1,
     "global" = model$global_trace
   )
   if (rescale) {
-    scale_factor <- switch(model$sim_parameters$family,
+    scale_factor <- switch(model$sim_params$family,
       "exponential" = 1,
-      "gamma" = model$sim_parameters$`k[1]`,
-      "weibull" = gamma(1 + (1 / model$sim_parameters$`shape[1]`)),
-      "gengamma" = gamma((model$sim_parameters$`shape[1]` + 1) / model$sim_parameters$`k[1]`) /
-        gamma(model$sim_parameters$`shape[1]` / model$sim_parameters$`k[1]`)
+      "gamma" = model$sim_params$survival_params$k,
+      "weibull" = gamma(1 + (1 / model$sim_params$survival_params$shape)),
+      "gengamma" = gamma((model$sim_params$survival_params$shape + 1) / model$sim_params$survival_params$k) /
+        gamma(model$sim_params$survival_params$shape / model$sim_params$survival_params$k)
     )
   } else {
     scale_factor <- 1
@@ -31,9 +33,9 @@ get_nlpd <- function(model, level = "ind", resolution = 0.1,
 
   if (level == "global") {
     summary_traces$y_ground <- approx(
-      x = traces$x,
-      y = traces$y_offset,
-      xout = summary_traces$x
+      t = traces$t,
+      eta = traces$eta,
+      xout = summary_traces$t
     )$y
   } else {
     summary_traces <- summary_traces |>
@@ -43,9 +45,9 @@ get_nlpd <- function(model, level = "ind", resolution = 0.1,
         traces_sub <- dplyr::filter(traces, .data[[level]] == current_id)
 
         .x$y_ground <- approx(
-          x = traces_sub$x,
-          y = traces_sub$y_offset,
-          xout = .x$x
+          x = traces_sub$t,
+          y = traces_sub$eta,
+          xout = .x$t
         )$y
         .x
       }) |>

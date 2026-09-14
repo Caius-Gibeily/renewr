@@ -54,11 +54,11 @@ vector get_qw(int n_quad) {
 }
 
 // spectral basis set, phi
-matrix phi(int N, int M, real L, vector x) {
+matrix phi(int N, int M, real L, real duration, vector x) {
   matrix[N, M] res;
 
   for (m in 1:M) {
-    res[, m] = inv_sqrt(L) * sin(pi() * m * (x + L) / (2 * L));
+    res[, m] = inv_sqrt(L) * sin(pi() * m * (x + L - duration / 2) / (2 * L));
   }
 
   return res;
@@ -407,7 +407,7 @@ vector gamma_likelihood(int N_total, int n_quad, vector qw, matrix eta_quad,
     } else if (censored[n] == 1) { // right-censored
       log_kernel[n] = -H;
     } else if (censored[n] == 2) { // left-censored
-      log_kernel[n] = log1m_exp(-H);
+       //log_kernel[n] = log1m_exp(-H);
     }
 
   }
@@ -491,22 +491,6 @@ matrix gengamma_likelihood(int N_total, vector log_qw, array[] vector eta_quad, 
     }
   }
   return log_kernel;
-}
-real get_rate_t(int ind, vector mu_ind, vector beta_ind_i,
-  vector beta_group, vector t, int M, real L, real w0, int kernel) {
-
-  matrix[1, M] PHI;
-  if (kernel != 5) {
-    PHI = phi(1, M, L, t);
-  } else {
-    PHI = phi_periodic(1, M, w0, t);
-  }
-
-  vector[1] f_group = PHI * beta_group;
-  vector[1] f_ind = PHI * beta_ind_i;
-  vector[1] eta_t = mu_ind[ind] + f_group + f_ind;
-
-  return exp(-eta_t[1]); // inv(exp(x)) is exp(-x)
 }
 
 

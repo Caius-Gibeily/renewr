@@ -20,13 +20,13 @@ reconstruct_traces <- function(model, level = c("ind","group","global"), prior =
 
   # Basis parameters
   M <- model$settings$M
-  L <- model$settings$L_factor * model$settings$duration
+  L <- model$settings$L_factor * model$settings$duration / 2
 
   t_grid <- seq(0,model$settings$duration,
                 by = resolution)
 
   if (model$settings$kernel != "periodic") {
-    phi_basis <- .phi(t_grid, M, L)
+    phi_basis <- .phi2(t_grid, M, L)
   } else {
     phi_basis <- .phi_periodic(t_grid, M,
                                model$settings$w0)
@@ -225,7 +225,7 @@ draw_traces <- function(model = NULL,recon_data = NULL, level="ind",prior=FALSE,
   recon_data <- recon_data[!(names(recon_data) %in% c("level",".width"))]
 
   tidy_samples <- do.call(.tidy_samples,recon_data)
-  print("test")
+
   return(tidy_samples)
 }
 
@@ -316,11 +316,11 @@ summarise_traces <- function(model = NULL,recon_data = NULL, level="ind",prior=F
     "ind" = tibble(
       ind = as.factor(rep(1:N, times = n_grid)),
       group = as.factor(g_membership[ind]),
-      x = rep(t_grid, each = N)),
+      t = rep(t_grid, each = N)),
     "group" = tibble(group = rep(1:N, times = length(t_grid)),
-      x = rep(t_grid, each = N)),
+      t = rep(t_grid, each = N)),
     "global" = tibble(global = 1,
-      x = t_grid),
+      t = t_grid),
     stop("Invalid level: ", level)
   )
 
@@ -351,29 +351,28 @@ summarise_traces <- function(model = NULL,recon_data = NULL, level="ind",prior=F
   if (length(dim(sampled_gp)) == 2) {
     dim(sampled_gp) <- c(nrow(sampled_gp),1,ncol(sampled_gp))
   }
-  y_vec <- as.vector(aperm(sampled_gp,c(3,2,1)))
+  eta_vec <- as.vector(aperm(sampled_gp,c(3,2,1)))
 
 
-  sample_id <- factor(seq_len(n_samples))
-  ind_id    <- factor(seq_len(N))
-  group_id  <- factor(g_membership[seq_len(N)])
+  sample_id <- seq_len(n_samples)
+  ind_id    <- seq_len(N)
+  group_id  <- g_membership[seq_len(N)]
 
-
-  base_df <- data.table::CJ(
-    ind = ind_id,
+  sampled_traces <- data.table::CJ(
     sample = sample_id,
-    x = t_grid,
+    ind = ind_id,
+    t = t_grid,
     sorted = FALSE
   )
 
-  base_dt[, group := rep(group_id,
+  sampled_traces[, group := rep(group_id,
                          each = length(sample_id) * length(t_grid))]
 
-  data.table::setcolorder(base_df, c("ind", "group", "sample", "x"))
+  data.table::setcolorder(sampled_traces, c("ind", "group", "sample", "t"))
 
-  sampled_traces <- bind_cols(base_df, y = y_vec)
+  sampled_traces$eta <- eta_vec
 
-  return(list(sampled_traces = sampled_traces,
+  return(list(sampled_traces = dplyr::as_tibble(sampled_traces),
               survival_params = lapply(survival_params,
                                        function(mat) mat[sample_indices])))
 }
@@ -410,6 +409,14 @@ summarise_traces <- function(model = NULL,recon_data = NULL, level="ind",prior=F
 .phi <- function(x, M, L) {
   outer(x,seq_len(M), function(x, m)
     sin(pi * m * (x + L) / (2 * L)) / sqrt(L)
+  )
+}
+.phi2 <- function(x, M, L) {
+  # major bug: L was being evaluated on [0, S] domain where S is the duration
+  # the formula was developed for [-L, L] domain centred on 0.
+  #L is specified relative to the half-duration L <- L/2
+  outer(x, seq_len(M), function(x,m)
+    sin(pi * m * (x + L - max(x)/2) / (2 * L)) / sqrt(L)
   )
 }
 

@@ -121,10 +121,10 @@ gp_fit.list <- function(event_data, duration, group_id = "group", ind_id = "ind"
     old = old,
     event_times = events |>
       pull(all_of(event_times_str)),
-    traces = event_data$traces, # for simulations
+    traces = event_data$traces$ind_traces, # for simulations
     censored = events$censored,
-    group_traces = event_data$group_traces,
-    global_trace = event_data$global_trace,
+    group_traces = event_data$traces$group_traces,
+    global_trace = event_data$traces$global_trace,
     events = events |> rename(ind = .data[[ind_str]],
                               event_times = .data[[event_times_str]]),
     dt = events |> pull(all_of(dt_str)),
@@ -145,7 +145,7 @@ gp_fit.list <- function(event_data, duration, group_id = "group", ind_id = "ind"
                         iter = iter, warmup = warmup,
                         adapt_delta = adapt_delta,
                         max_treedepth = max_treedepth),
-    sim_parameters = event_data$sim_parameters
+    sim_params = event_data$sim_params
   )
 
   if ("prior_pc" %in% run & "fit" %in% run) {
@@ -221,8 +221,7 @@ gp_fit.gp_model <- function(model_data, ...) {
   fit <- rstan::sampling(
     object = stan_obj,
     data = stan_dat,
-    init = .build_inits(stan_dat,
-                        model_data$stan_runtime$chains),
+    init = .build_inits(stan_dat,model_data$stan_runtime$chains),
     chains = model_data$stan_runtime$chains,
     iter = model_data$stan_runtime$iter,
     warmup = model_data$stan_runtime$warmup,
@@ -320,11 +319,14 @@ filter_data <- function(event_data, subs, by = c("ind", "group")) {
   by <- match.arg(by)
 
   if (by == "ind") {
-    event_data$traces <- .filter_reindex(event_data$traces, subs, "ind")
+    event_data$traces$ind_traces <- .filter_reindex(event_data$traces$ind_traces,
+                                                    subs, "ind")
     event_data$events <- .filter_reindex(event_data$events, subs, "ind")
   } else {
-    event_data$traces <- .filter_reindex(event_data$traces, subs, "ind", "group")
-    event_data$group_traces <- .filter_reindex(event_data$group_traces, subs, "group")
+    event_data$traces$ind_traces <- .filter_reindex(event_data$traces$ind_traces,
+                                                      subs, "ind", "group")
+    event_data$traces$group_traces <- .filter_reindex(event_data$traces$group_traces,
+                                                      subs, "group")
     event_data$events <- .filter_reindex(event_data$events, subs, "group", "ind")
   }
 
@@ -369,8 +371,7 @@ filter_data <- function(event_data, subs, by = c("ind", "group")) {
   median_dt <- median(stan_dat$dt)
 
   lapply(seq_len(n_chains), function(i) {
-    list(
-      rho_group = median_dt * exp(rnorm(1, 0, 0.1)),
+    inits <- list(rho_group = median_dt * exp(rnorm(1, 0, 0.1)),
       rho_ind = median_dt * exp(rnorm(1, 0, 0.1)),
 
       alpha_group = 0.3 * exp(rnorm(1, 0, 0.1)),
@@ -385,13 +386,21 @@ filter_data <- function(event_data, subs, by = c("ind", "group")) {
       z_group = rnorm(stan_dat$M, 0, 0.1),
       z_ind_raw  = matrix(rnorm((stan_dat$I - 1) * stan_dat$M, 0, 0.1),
                           nrow = stan_dat$I - 1),
-      mu_raw_ind = rnorm(stan_dat$I - 1, 0, 0.1),
+      mu_raw_ind = rnorm(stan_dat$I - 1, 0, 0.1)
 
-      k = array(1.5 + abs(rnorm(1, 0, 0.3)))
-      #shape = array(1.2 + abs(rnorm(1, 0, 0.3))),
-
-      #sigma_lognormal = array(0.5 * exp(rnorm(1, 0, 0.1)))
+      #shape = matrix(1.2 + abs(rnorm(1, 0, 0.3))),
+      #
     )
+
+    surv <- switch(as.character(stan_dat$family),
+                   "1" = list(),
+                   "2" = list(k = array(1.5 + abs(rnorm(1, 0, 0.3)))),
+                   "3" = list(shape = array(1.5 + abs(rnorm(1, 0, 0.3)))),
+                   "4" = list(k = array(1.5 + abs(rnorm(1, 0, 0.3)))),
+                   "5" = list(sigma_lognormal = array(0.5 * exp(rnorm(1, 0, 0.1)))))
+
+    append(inits,surv)
+
   })
 }
 
