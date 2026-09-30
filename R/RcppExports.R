@@ -9,7 +9,7 @@ simulate_renewal_orig <- function(time_vec, modulant_vec, shape, k) {
     .Call(`_renewr_simulate_renewal_orig`, time_vec, modulant_vec, shape, k)
 }
 
-simulate_renewal_flexible <- function(time_vec, modulant_mat_flat, groups_vec, shape_vec, k_vec, n_ind, n_samples, max_x, use_samples, start_time) {
-    .Call(`_renewr_simulate_renewal_flexible`, time_vec, modulant_mat_flat, groups_vec, shape_vec, k_vec, n_ind, n_samples, max_x, use_samples, start_time)
+simulate_renewal_flexible <- function(time_vec, modulant_mat_flat, groups_vec, shape_vec, k_vec, n_ind, n_samples, max_x, use_samples, start_time, seed_events) {
+    .Call(`_renewr_simulate_renewal_flexible`, time_vec, modulant_mat_flat, groups_vec, shape_vec, k_vec, n_ind, n_samples, max_x, use_samples, start_time, seed_events)
 }
 

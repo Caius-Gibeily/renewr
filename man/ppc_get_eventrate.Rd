@@ -5,7 +5,7 @@
 \title{Plot overall event rate from prior or posterior predictive distribution}
 \usage{
 ppc_get_eventrate(
-  model,
+  model = NULL,
   ppc_events = NULL,
   scale_factor = 1,
   .width = c(0.5, 0.8, 0.99),

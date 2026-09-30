@@ -62,7 +62,7 @@
 #' @export
 mcmc_plot <- function(model,pars=NULL,prior=FALSE,
                                type = c("areas", "dens", "dens_chains", "hist", "intervals", "trace"),
-                      scheme="blue",show_ground = TRUE,height=0.3, linewidth=1,color="black",...) {
+                      scheme="blue",show_ground = TRUE,height=0.3, linewidth=1,color="black",page="split",...) {
   if (length(type) > 1) type = "intervals" # default option
 
   type <- match.arg(type)
@@ -78,17 +78,29 @@ mcmc_plot <- function(model,pars=NULL,prior=FALSE,
   pars_filt <- grep(c("z_|beta|eta|log_|diag|mu_raw_|lp_"), all_pars, value = TRUE, invert = TRUE)
 
   pars_types <- list(mu = c("mu"), alpha = c("alpha"), rho = c("rho"), survival = c("k|shape"))
-  if (is.null(pars)) {
-    sub_pars <- lapply(pars_types, function(type) {
-      grep(type, pars_filt, value = TRUE, invert = FALSE)
-    })
-  } else {
-    matching_pars <- lapply(pars, function(type) {
-      grep(type, pars_filt, value = TRUE, invert = FALSE)
-    })
-    sub_pars <- lapply(pars_types, function(type) {
-      grep(type, purrr::flatten(matching_pars), value = TRUE, invert = FALSE)
-    })
+  if (page == "split") {
+    if (is.null(pars)) {
+      sub_pars <- lapply(pars_types, function(type) {
+        grep(type, pars_filt, value = TRUE, invert = FALSE)
+      })
+    } else {
+      matching_pars <- lapply(pars, function(type) {
+        grep(type, pars_filt, value = TRUE, invert = FALSE)
+      })
+      sub_pars <- lapply(pars_types, function(type) {
+        grep(type, purrr::flatten(matching_pars), value = TRUE, invert = FALSE)
+      })
+    }
+  } else if (page == "single") {
+    if (!is.null(pars)) {
+      matching_pars <- lapply(pars, function(type) {
+        grep(type, pars_filt, value = TRUE, invert = FALSE)
+      }) |> list_c()
+      sub_pars <- matching_pars
+    } else {
+      sub_pars <- pars_filt
+    }
+
   }
 
   plot_fn <- switch(type,
@@ -102,37 +114,94 @@ mcmc_plot <- function(model,pars=NULL,prior=FALSE,
   )
 
   bayesplot::color_scheme_set(scheme = scheme)
+  all_sim <- do.call(c,model$sim_params)
 
-  plots <- lapply(sub_pars, function(p) {
-    if (!rlang::is_empty(p)) {
-      p_layer <- plot_fn(model_dat, pars = p, ...) +
-        ggplot2::theme_minimal()
-      if (show_ground & !is.null(model$sim_parameters) & any(p %in% names(model$sim_parameters))) {
+  if (page == "split") {
+    plots <- lapply(sub_pars, function(p) {
+      if (!rlang::is_empty(p)) {
+        p_layer <- plot_fn(model_dat, pars = p, ...) +
+          ggplot2::theme_minimal()
+        pattern <- paste(gsub("[^A-Za-z_]","",p), collapse = "|")
 
-        params <- model$sim_parameters |>
-          purrr::keep_at(p) |>
-          dplyr::as_tibble() |>
-          tidyr::pivot_longer(cols= everything(),
-                       names_to="parameter",
-                       values_to = "xintercept")
-        y_levels <- ggplot2::ggplot_build(p_layer)$layout$panel_params[[1]]$y$get_labels()
+        params_matched <- grep(pattern, names(all_sim))
 
-        params <- params |>
-          dplyr::filter(parameter %in% y_levels) |>
-          dplyr::mutate(parameter = factor(parameter, levels = y_levels))
+        if (show_ground & !is.null(model$sim_params) & length(params_matched) != 0) {
 
-        p_layer +
-          ggplot2::geom_linerange(
-            data = params,
-            aes(x = xintercept, y = parameter, ymin = as.numeric(parameter) - height, ymax = as.numeric(parameter) + height),
-            inherit.aes = FALSE,
-            color = color, linewidth = linewidth
+          params <- tibble(
+            parameter = p,
+            xintercept = unlist(all_sim[params_matched]))
+
+          y_levels <- ggplot2::ggplot_build(p_layer)$layout$panel_params[[1]]$y$get_labels()
+
+          params <- params |>
+            dplyr::filter(parameter %in% y_levels) |>
+            dplyr::mutate(parameter = factor(parameter, levels = y_levels))
+
+
+          p_layer +
+            ggplot2::geom_linerange(
+              data = params,
+              aes(x = xintercept, y = parameter, ymin = as.numeric(parameter) - height,
+                  ymax = as.numeric(parameter) + height),
+              inherit.aes = FALSE,
+              color = color, linewidth = linewidth
+            )
+
+        } else p_layer
+      }
+
+    }) |> purrr::discard(is.null)
+
+    .ggplot_successive(plots)
+  } else if (page == "single") {
+
+      if (!rlang::is_empty(sub_pars)) {
+        p_layer <- plot_fn(model_dat, pars = sub_pars, ...) +
+          ggplot2::theme_minimal()
+
+        clean_sub <- gsub("[^A-Za-z_]", "", sub_pars)
+        clean_sim_names <- gsub("[^A-Za-z_]|^.*?\\.", "", names(all_sim))
+
+        matched_idx <- match(clean_sub, clean_sim_names)
+
+        valid <- !is.na(matched_idx)
+        params_names <- sub_pars[valid]
+        params_values <- matched_idx[valid]
+
+        if (show_ground && !is.null(model$sim_params) && length(params_names) != 0) {
+
+          y_levels <- ggplot2::ggplot_build(p_layer)$layout$panel_params[[1]]$y$get_labels()
+
+
+          params <- tibble::tibble(
+            parameter  = params_names,
+            xintercept = unlist(all_sim[params_values])
+          ) |>
+            dplyr::filter(parameter %in% y_levels) |>
+            dplyr::mutate(parameter = factor(parameter, levels = y_levels))
+
+          p_layer <- p_layer +
+            ggplot2::geom_linerange(
+              data = params,
+              ggplot2::aes(x = xintercept, y = parameter,
+                           ymin = 1 - height, ymax = 1 + height),
+              inherit.aes = FALSE,
+              color = color, linewidth = linewidth
+            )
+        }
+        ncol <- if (length(sub_pars) <= 2) {
+          1} else length(sub_pars) %/% 2
+        p_layer <- p_layer +
+          ggplot2::scale_y_discrete(limits = NULL) +
+          ggplot2::facet_wrap(~ parameter,ncol = ncol,
+            scales = "free") + ggplot2::theme(
+            axis.text.y  = ggplot2::element_blank(),
+            axis.ticks.y = ggplot2::element_blank()
           )
 
-      } else p_layer
+        } else p_layer
+
+    return(p_layer)
     }
 
-  }) |> purrr::discard(is.null)
-
-  .ggplot_successive(plots)
 }

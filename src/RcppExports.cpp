@@ -40,8 +40,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // simulate_renewal_flexible
-DataFrame simulate_renewal_flexible(std::vector<double> time_vec, NumericVector modulant_mat_flat, IntegerVector groups_vec, NumericVector shape_vec, NumericVector k_vec, int n_ind, int n_samples, double max_x, bool use_samples, double start_time);
-RcppExport SEXP _renewr_simulate_renewal_flexible(SEXP time_vecSEXP, SEXP modulant_mat_flatSEXP, SEXP groups_vecSEXP, SEXP shape_vecSEXP, SEXP k_vecSEXP, SEXP n_indSEXP, SEXP n_samplesSEXP, SEXP max_xSEXP, SEXP use_samplesSEXP, SEXP start_timeSEXP) {
+DataFrame simulate_renewal_flexible(std::vector<double> time_vec, NumericVector modulant_mat_flat, IntegerVector groups_vec, NumericVector shape_vec, NumericVector k_vec, int n_ind, int n_samples, double max_x, bool use_samples, double start_time, int seed_events);
+RcppExport SEXP _renewr_simulate_renewal_flexible(SEXP time_vecSEXP, SEXP modulant_mat_flatSEXP, SEXP groups_vecSEXP, SEXP shape_vecSEXP, SEXP k_vecSEXP, SEXP n_indSEXP, SEXP n_samplesSEXP, SEXP max_xSEXP, SEXP use_samplesSEXP, SEXP start_timeSEXP, SEXP seed_eventsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -55,7 +55,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type max_x(max_xSEXP);
     Rcpp::traits::input_parameter< bool >::type use_samples(use_samplesSEXP);
     Rcpp::traits::input_parameter< double >::type start_time(start_timeSEXP);
-    rcpp_result_gen = Rcpp::wrap(simulate_renewal_flexible(time_vec, modulant_mat_flat, groups_vec, shape_vec, k_vec, n_ind, n_samples, max_x, use_samples, start_time));
+    Rcpp::traits::input_parameter< int >::type seed_events(seed_eventsSEXP);
+    rcpp_result_gen = Rcpp::wrap(simulate_renewal_flexible(time_vec, modulant_mat_flat, groups_vec, shape_vec, k_vec, n_ind, n_samples, max_x, use_samples, start_time, seed_events));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -70,7 +71,7 @@ RcppExport SEXP _rcpp_module_boot_stan_fit4prior_pc_one_ind_mod();
 static const R_CallMethodDef CallEntries[] = {
     {"_renewr_simulate_renewal", (DL_FUNC) &_renewr_simulate_renewal, 4},
     {"_renewr_simulate_renewal_orig", (DL_FUNC) &_renewr_simulate_renewal_orig, 4},
-    {"_renewr_simulate_renewal_flexible", (DL_FUNC) &_renewr_simulate_renewal_flexible, 10},
+    {"_renewr_simulate_renewal_flexible", (DL_FUNC) &_renewr_simulate_renewal_flexible, 11},
     {"_rcpp_module_boot_stan_fit4hsgp_multi_group_mod", (DL_FUNC) &_rcpp_module_boot_stan_fit4hsgp_multi_group_mod, 0},
     {"_rcpp_module_boot_stan_fit4hsgp_one_group_mod", (DL_FUNC) &_rcpp_module_boot_stan_fit4hsgp_one_group_mod, 0},
     {"_rcpp_module_boot_stan_fit4hsgp_one_ind_mod", (DL_FUNC) &_rcpp_module_boot_stan_fit4hsgp_one_ind_mod, 0},

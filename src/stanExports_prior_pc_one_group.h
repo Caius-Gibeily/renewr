@@ -347,7 +347,7 @@ static constexpr std::array<const char*, 508> locations_array__ =
   " (in 'string', line 314, column 4 to column 77)",
   " (in 'string', line 313, column 24 to line 315, column 3)",
   " (in 'string', line 313, column 9 to line 315, column 3)",
-  " (in 'string', line 312, column 4 to column 44)",
+  " (in 'string', line 312, column 4 to column 45)",
   " (in 'string', line 311, column 24 to line 313, column 3)",
   " (in 'string', line 311, column 9 to line 315, column 3)",
   " (in 'string', line 310, column 4 to column 49)",
@@ -1703,10 +1703,10 @@ apply_prior_lp(const T0__& param, const T1__& dist, const T2__& arg1,
             current_statement__ = 321;
             if (stan::math::logical_eq(dist, 5)) {
               current_statement__ = 319;
-              lp_accum__.add(stan::math::beta_lpdf<false>(param, arg1, arg2));
+              lp_accum__.add(stan::math::gamma_lpdf<false>(param, arg1, arg2));
             } else {
               current_statement__ = 318;
-              if (stan::math::logical_eq(dist, 5)) {
+              if (stan::math::logical_eq(dist, 6)) {
                 current_statement__ = 316;
                 lp_accum__.add((stan::math::exponential_lpdf<false>(param,
                                   arg1) -

@@ -28,6 +28,7 @@ struct FlexibleRenewalSimulator : public Worker {
   const double max_x;
   const bool use_samples;
   const double start_time;
+  const int seed_events;
 
   std::vector<ThreadData>& thread_storage;
 
@@ -38,18 +39,17 @@ struct FlexibleRenewalSimulator : public Worker {
                            const NumericVector& k_vec,
                            int n_time, int n_ind, double t_diff, double max_x,
                            bool use_samples, std::vector<ThreadData>& thread_storage,
-                           double start_time)
+                           double start_time, int seed_events)
     : time_vec(time_vec), flat_modulant_ptr(flat_modulant_ptr), groups_vec(groups_vec),
       shape_vec(shape_vec), k_vec(k_vec), t_diff(t_diff), n_time(n_time),
       n_ind(n_ind), max_x(max_x), use_samples(use_samples), thread_storage(thread_storage),
-      start_time(start_time) {}
+      start_time(start_time), seed_events(seed_events) {}
 
   void operator()(std::size_t begin, std::size_t end) {
     gengamma_orig::density gen_pdf;
     gengamma_orig::cdf gen_cdf;
 
-    std::random_device rd;
-    std::mt19937 rng(rd());
+    std::mt19937 rng(seed_events);
     std::uniform_real_distribution<double> dist(0.0, 1.0);
 
     for (std::size_t task_id = begin; task_id < end; task_id++) {
@@ -152,7 +152,8 @@ DataFrame simulate_renewal_flexible(
     int n_samples,
     double max_x,
     bool use_samples,
-    double start_time
+    double start_time,
+    int seed_events
 ) {
   double t_diff = time_vec[1] - time_vec[0];
   int n_time = time_vec.size();
@@ -164,7 +165,7 @@ DataFrame simulate_renewal_flexible(
   std::vector<ThreadData> thread_storage(total_tasks);
 
   FlexibleRenewalSimulator simulator(time_vec, flat_ptr, groups_vec, shape_vec, k_vec,
-                                     n_time, n_ind, t_diff, max_x, use_samples, thread_storage, start_time);
+                                     n_time, n_ind, t_diff, max_x, use_samples, thread_storage, start_time, seed_events);
 
   parallelFor(0, total_tasks, simulator);
 

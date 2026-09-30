@@ -3,7 +3,8 @@
 #' @seealso [tidy_traces()], [draw_traces()], [summarise_traces()],
 #' [reconstruct_traces()]
 #' @export
-reconstruct_traces <- function(model, level = c("ind","group","global"), prior = FALSE, dev_only = FALSE, resolution = 0.1) {
+reconstruct_traces <- function(model, level = c("ind","group","global"), prior = FALSE,
+                               dev_only = FALSE, resolution = 0.1, add_mu = TRUE) {
   if (dev_only && "one_ind" %in% class(model)) {
     warning("Computing deviations is not possible in a single-individual model with one hierarchical level. Defaulting to individual GP trace")
     dev_only = FALSE
@@ -84,9 +85,12 @@ reconstruct_traces <- function(model, level = c("ind","group","global"), prior =
 
   #> sweep(MARGIN = c(1,2),
   #          STATS = mu_group, FUN = "+")
-
-  f_ind <- ttm(beta_ind,phi_basis,3) |> sweep(MARGIN = c(1,2),
+  if (add_mu) {
+    f_ind <- ttm(beta_ind,phi_basis,3) |> sweep(MARGIN = c(1,2),
                                               STATS = mu_ind, FUN = "+")
+  } else {
+    f_ind <- ttm(beta_ind,phi_basis,3)
+  }
 
   if (any(c("one_group","multi_group") %in% class(model))) {
 
@@ -131,12 +135,19 @@ reconstruct_traces <- function(model, level = c("ind","group","global"), prior =
 
       if (!dev_only) {
         if ("one_group" %in% class(model)) {
-          f_group <- f_group |> sweep(MARGIN = 1,
-                                      STATS = mu_group, FUN = "+")
+          if (add_mu) {
+            f_group <- f_group |> sweep(MARGIN = 1,
+                                        STATS = mu_group, FUN = "+")
+          }
         } else {
-          f_group <- f_group |>
-            sweep(MARGIN = c(1,2),STATS = mu_group, FUN = "+") |>
-            sweep(MARGIN = c(1,3), STATS = t(f_global), FUN = "+")
+          if (add_mu) {
+            f_group <- f_group |>
+              sweep(MARGIN = c(1,2),STATS = mu_group, FUN = "+") |>
+              sweep(MARGIN = c(1,3), STATS = t(f_global), FUN = "+")
+          } else {
+            f_group <- f_group |>
+              sweep(MARGIN = c(1,3), STATS = t(f_global), FUN = "+")
+          }
         }
         gp_dat <- f_group@data
 
@@ -181,13 +192,14 @@ reconstruct_traces <- function(model, level = c("ind","group","global"), prior =
 #' @seealso [draw_traces()], [summarise_traces()], [reconstruct_traces()]
 #' @export
 tidy_traces <- function(model = NULL, recon_data = NULL, level = c("ind","group","global"),
-                        prior = FALSE, dev_only = FALSE, resolution = 0.2, .width=c(0.5,0.8,0.99), rescale = FALSE) {
+                        prior = FALSE, dev_only = FALSE, resolution = 0.2, .width=c(0.5,0.8,0.99), rescale = FALSE,
+                        add_mu = TRUE) {
   if (is.null(model) & is.null(recon_data)) {
     stop("Please ensure you supply either a fitted gp_model or reconstructed traces from a previous gp_model.")
   }
 
   if (is.null(recon_data)) {
-    recon_data <- reconstruct_traces(model, level, prior, dev_only, resolution)
+    recon_data <- reconstruct_traces(model, level, prior, dev_only, resolution, add_mu)
   }
   recon_data$.width <- .width
 
@@ -213,6 +225,7 @@ draw_traces <- function(model = NULL,recon_data = NULL, level="ind",prior=FALSE,
   if (is.null(model) & is.null(recon_data)) {
     stop("Please ensure you supply either a fitted gp_model or reconstructed traces from a previous gp_model.")
   }
+
   if (is.null(recon_data)) {
     recon_data <- reconstruct_traces(model, level, prior, dev_only, resolution)
   }
@@ -335,9 +348,7 @@ summarise_traces <- function(model = NULL,recon_data = NULL, level="ind",prior=F
 
 #' @noRd
 .tidy_samples <- function(gp_dat, survival_params, t_grid, N, g_membership, n_grid, n_samples = 100) {
-  if (is.null(n_samples)) {
-    n_samples <- 100
-  }
+
   dims <- dim(gp_dat)
 
   if (n_samples > dims[1]) {
@@ -405,20 +416,7 @@ summarise_traces <- function(model = NULL,recon_data = NULL, level="ind",prior=F
 
 }
 
-#' @noRd
-.phi <- function(x, M, L) {
-  outer(x,seq_len(M), function(x, m)
-    sin(pi * m * (x + L) / (2 * L)) / sqrt(L)
-  )
-}
-.phi2 <- function(x, M, L) {
-  # major bug: L was being evaluated on [0, S] domain where S is the duration
-  # the formula was developed for [-L, L] domain centred on 0.
-  #L is specified relative to the half-duration L <- L/2
-  outer(x, seq_len(M), function(x,m)
-    sin(pi * m * (x + L - max(x)/2) / (2 * L)) / sqrt(L)
-  )
-}
+
 
 #' @noRd
 .phi_periodic <- function(x,M,w0) {

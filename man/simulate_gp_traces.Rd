@@ -14,10 +14,9 @@ simulate_gp_traces(
   mu_global = 0,
   sigma_ind = 0.3,
   sigma_group = 0.05,
-  omega = 0.8,
-  alpha_ind,
-  alpha_group,
-  alpha_global,
+  alpha_ind = 0.3,
+  alpha_group = 5/4 * alpha_ind,
+  alpha_global = 5/4 * alpha_group,
   rho_ind = 10,
   rho_group = 5/4 * rho_ind,
   rho_global = 5/4 * rho_group,
@@ -32,9 +31,6 @@ simulate_gp_traces(
 \item{n_ind}{Integer or integer vector. Number of individuals per group. If 1 integer is supplied,}
 
 \item{duration}{Integer. The length of the full time series to simulate (in seconds). The default is 100 seconds}
-
-\item{omega}{Numeric. Partition coefficient determining proportion of GP amplitude
-driven at the individual, group or global levels as applicable.}
 
 \item{alpha_global, alpha_group, alpha_ind}{Numeric. Amplitude parameters of the
 covariance kernel. \code{alpha_global}, \code{alpha_group} and \code{alpha_ind} respectively

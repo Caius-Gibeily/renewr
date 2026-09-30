@@ -307,8 +307,8 @@ void apply_prior_lp(real param, real dist, real arg1, real arg2) {
   } else if (dist == 4) {
     target += inv_gamma_lpdf(param | arg1, arg2);
   } else if (dist == 5) {
-    target += beta_lpdf(param | arg1, arg2);
-  } else if (dist == 5) {
+    target += gamma_lpdf(param | arg1, arg2);
+  } else if (dist == 6) {
     target += exponential_lpdf(param | arg1) - exponential_lccdf(1.0 | arg1);
   }
 }

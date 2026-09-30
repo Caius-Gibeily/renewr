@@ -25,8 +25,6 @@
 #' set the length-scale terms at global, group and individual-level trajectories. By default,
 #' length-scale parameters are set at the same scale at 15. If only one rho term is specified,
 #' the others are set to the same value.
-#' @param omega Numeric. Partition coefficient determining proportion of GP amplitude
-#' driven at the individual, group or global levels as applicable.
 #' @param L_factor Numeric.
 #' @param M Numeric. Number of basis functions to use for Hilbert space approximation.
 #' If unspecified, M functions are selected according to recommendations in Riutort et al. (2017)
@@ -45,7 +43,8 @@
 #' @export
 simulate_gp_traces <- function(n_ind = 5, n_group = 1, duration = 120, alpha = 0.8,
                                mu_ind = 0, mu_group = 0, mu_global = 0, sigma_ind = 0.3, sigma_group = 0.05,
-                               omega = 0.8, alpha_ind, alpha_group, alpha_global, rho_ind = 10,
+                              alpha_ind = 0.3, alpha_group = 5 / 4 * alpha_ind,
+                               alpha_global = 5 / 4 * alpha_group, rho_ind = 10,
                                rho_group = 5 / 4 * rho_ind, rho_global = 5 / 4 * rho_group,
                                kernel = "squared_exp", L_factor = 1.2, M, gp_seed = NULL, mu_seed = NULL) {
   if (length(n_ind) > 1 & is.numeric(n_ind)) {
@@ -73,50 +72,9 @@ simulate_gp_traces <- function(n_ind = 5, n_group = 1, duration = 120, alpha = 0
     }
     M <- .get_M_bases(duration, L_factor, rho_list, kernel)
   }
-  if (missing(omega)) {
-    omega <- switch(type,
-      "one_ind" = 1,
-      "one_group" = c(1/4, 3/4),
-      "multi_group" = c(1/6, 2/6, 3/6)
-    )
-  }
 
-  if ((type == "one_ind" & missing(alpha_ind)) |
-    (type == "one_group" & missing(alpha_ind) & missing(alpha_group)) |
-    (type == "multi_group" & missing(alpha_ind) & missing(alpha_group) &
-      missing(alpha_global))) {
-    if (type == "one_ind") {
-      alpha_ind <- alpha
-    } else if (type == "one_group") {
-      if (length(omega) > 2) {
-        warning("Using only the first two elements to assign alpha_ind and alpha_group")
-        omega <- omega[1:2] / sum(omega[1:2])
-      } else if (length(omega) == 1) {
-        if (omega > 1 | omega < 0) stop("Please ensure omega is >= 0 or <= 1")
-        omega <- c(1 - omega, omega)
-      }
 
-      if (round(sum(omega),5) != 1) {
-        warning("Sum of omega weights does not sum to 1. Normalising weights.")
 
-        omega <- omega / sum(omega)
-      }
-      alpha_group <- alpha * omega[2]
-      alpha_ind <- alpha * omega[1]
-    } else if (type == "multi_group") {
-      if (length(omega) < 3) {
-        stop("Please specify three weights for a multi-group simulation or
-                    set alpha_ind, alpha_group and alpha_global separately")
-      }
-      if (sum(omega) != 1) {
-        warning("Sum of omega weights does not sum to 1. Normalising weights.")
-        omega <- omega / sum(omega)
-      }
-      alpha_global <- alpha * omega[3]
-      alpha_group <- alpha * omega[2]
-      alpha_ind <- alpha * omega[1]
-    }
-  }
 
   L <- duration / 2 * L_factor
   t_grid <- seq(0, duration, by = 1)
@@ -150,9 +108,7 @@ simulate_gp_traces <- function(n_ind = 5, n_group = 1, duration = 120, alpha = 0
 
 
   } else if (type == "one_group") {
-    if (any(missing(alpha_ind),missing(alpha_group))) {
-      stop("Please specify an alpha_ind and alpha_group or set alpha and omega to partition alpha between individual and group levels")
-    }
+
 
     alpha_global <- rho_global <- mu_global <- NULL
 
@@ -202,9 +158,7 @@ simulate_gp_traces <- function(n_ind = 5, n_group = 1, duration = 120, alpha = 0
 
 
   } else if (type == "multi_group") {
-    if (any(missing(alpha_ind),missing(alpha_group),missing(alpha_global))) {
-      stop("Please specify an alpha_ind, alpha_group and alpha_global or set alpha and omega to partition alpha across the three levels.")
-    }
+
     QR <- .qr_helmert(n_group)
 
     diagS_group <- .get_diagSPD(
@@ -408,19 +362,6 @@ simulate_gp_traces <- function(n_ind = 5, n_group = 1, duration = 120, alpha = 0
   return(diagS)
 }
 
-.get_M_bases <- function(duration, L_factor, rho_list,
-                         kernel = "squared_exp") {
-  idx <- match(kernel, c("squared_exp", "matern12", "matern32", "matern52"))
-  scale_factors <- c(1.75, 100, 3.42, 2.65)
-  L_limits <- c(3.2, 8, 4.5, 4.1)
-  S <- duration / 2
-  if (L_factor >= 1.2 | L_factor >= L_limits[idx] * min(rho_list) / S) {
-    M <- scale_factors[idx] * L_factor * S / min(rho_list)
-  } else {
-    stop("Please choose a higher L_factor for stability.")
-  }
-  return(ceiling(M))
-}
 #' @noRd
 .qr_helmert <- function(N) {
   QR <- matrix(0, nrow = N, ncol = N - 1)
@@ -441,7 +382,7 @@ simulate_gp_traces <- function(n_ind = 5, n_group = 1, duration = 120, alpha = 0
 .diagSPD_EQ <- function(alpha, rho, M, L) {
   indices <- seq_len(M)
   factor <- alpha * sqrt(sqrt(2 * pi) * rho)
-  exponent <- -0.25 * (rho * pi / (2 * L))^2
+  exponent <- -0.25 * (rho * pi / 2 / L)^2
   factor * exp(exponent * indices^2)
 }
 

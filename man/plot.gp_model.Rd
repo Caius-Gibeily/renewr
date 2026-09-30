@@ -22,7 +22,8 @@
   sample_alpha = 0.6,
   sample_colour = "darkgrey",
   sample_linewidth = 0.9,
-  rescale = FALSE
+  rescale = FALSE,
+  plot_mu = TRUE
 )
 }
 \arguments{

@@ -25,17 +25,13 @@ gp_fit.data.frame <- function(events,...) {
 gp_fit.list <- function(event_data, duration, group_id = "group", ind_id = "ind",subs=NULL,
                        event_times = "event_times", dt = "dt",run = c("prior_pc","fit"),
 
-                       M = 40, family = c("exponential","gamma","weibull","lognormal","gengamma"),
+                       M = NULL, family = c("exponential","gamma","weibull","lognormal","gengamma"),
                        kernel = c("squared_exp", "matern12","matern32","matern52","periodic"),
-                       priors = NULL, L_factor = 1.2, w0 = 0.5, n_quad = 3,
-                       chains = 4, iter = 2000, warmup = 1000, adapt_delta = 0.95, max_treedepth = 12,old=FALSE,...) {
+                       expected_lengthscale = 5, priors = NULL, expected_evrange = c(2,50), L_factor = 1.5, w0 = 0.5, n_quad = 3,
+                       chains = 4, iter = 2000, warmup = 1000, adapt_delta = 0.95, max_treedepth = 12,...) {
   kernel <- match.arg(kernel)
   family <- match.arg(family)
 
-  if (kernel == "periodic") {
-    warning("Periodic kernel uses half the number of basis functions (M). Doubling M")
-    M = M * 2
-  }
 
   events <- event_data$events
 
@@ -48,6 +44,10 @@ gp_fit.list <- function(event_data, duration, group_id = "group", ind_id = "ind"
 
   dt_str <- tryCatch(rlang::as_name(rlang::ensym(dt)),
                     error = function(e) NULL)
+
+  if (is.null(events$censored)) {
+    events <- .apply_censoring(events)
+  }
 
   if (missing(duration)) {
     duration <- events |>
@@ -118,7 +118,6 @@ gp_fit.list <- function(event_data, duration, group_id = "group", ind_id = "ind"
   }
 
   model_data <- list(
-    old = old,
     event_times = events |>
       pull(all_of(event_times_str)),
     traces = event_data$traces$ind_traces, # for simulations
@@ -139,8 +138,10 @@ gp_fit.list <- function(event_data, duration, group_id = "group", ind_id = "ind"
                     w0 = w0,
                     kernel = match.arg(kernel),
                     family = match.arg(family),
-                    priors = priors,
-                    n_quad = n_quad),
+                    n_quad = n_quad,
+                    type = subclass,
+                    expected_lengthscale = expected_lengthscale,
+                    expected_evrange = expected_evrange),
     stan_runtime = list(chains = chains,
                         iter = iter, warmup = warmup,
                         adapt_delta = adapt_delta,
@@ -150,41 +151,49 @@ gp_fit.list <- function(event_data, duration, group_id = "group", ind_id = "ind"
 
   if ("prior_pc" %in% run & "fit" %in% run) {
     class(model_data) <- c("gp_prior_pc",subclass)
-    gp_fit(model_data) |> gp_fit()
+    gp_fit(model_data,priors) |> gp_fit(priors = priors)
   } else if ("prior_pc" %in% run) {
     class(model_data) <- c("gp_prior_pc",subclass)
-    gp_fit(model_data)
+    gp_fit(model_data,priors)
   } else if ("fit" %in% run) {
     class(model_data) <- c("gp_model",subclass)
-    gp_fit(model_data)
+    gp_fit(model_data,priors)
   }
 }
 
 #' @export
 #' @method gp_fit gp_model
-gp_fit.gp_model <- function(model_data, ...) {
+gp_fit.gp_model <- function(model_data, priors) {
+  prior_frame <- .process_priors(model_data,priors)
 
+  if (model_data$settings$kernel == "periodic") {
+    warning("Periodic kernel uses half the number of basis functions (M). Doubling M")
+    M = M * 2
+  }
   if ("one_ind" %in% class(model_data)) {
     message("Fitting a single-individual GP model")
-    prior_frame <- parse_priors(model_data)
     stan_obj <- stanmodels$hsgp_one_ind
   } else if ("one_group" %in% class(model_data)) {
     message("Fitting a single-group hierarchical GP model")
-    prior_frame <- parse_priors(model_data)
-    if (model_data$old) {
-      stan_obj <- stanmodels$hsgp_one_group2
-    } else {
-      stan_obj <- stanmodels$hsgp_one_group
-    }
+    stan_obj <- stanmodels$hsgp_one_group
+
   } else if ("multi_group" %in% class(model_data)) {
     message("Fitting a multi-group hierarchical GP model")
-    prior_frame <- parse_priors(model_data)
     stan_obj <- stanmodels$hsgp_multi_group
   }
 
+  lower_rho <- .get_rho_density(prior_frame,prctile = 0.2) # 0.3
+
+  if (is.null(model_data$settings$M)) {
+    model_data$settings$M <- .get_M_bases(model_data$settings$duration,
+                    model_data$settings$L_factor,
+                    lower_rho,model_data$settings$kernel)
+  }
+  print(model_data$settings$M)
   model_data$settings <- append(model_data$settings,
                                  list(variables=prior_frame |>
-                                        pull(prior_variable)))
+                                        pull(param),
+                                      priors = prior_frame))
   flags <- .get_flags(model_data)
 
   stan_dat <- list(
@@ -205,9 +214,9 @@ gp_fit.gp_model <- function(model_data, ...) {
     dt = model_data$dt,
     censored = model_data$censored,
 
-    distributions = as.double(prior_frame$distribution_id),
+    distributions = as.double(prior_frame$dist_id),
     N_params = nrow(prior_frame),
-    params = as.matrix(prior_frame[c("param_1","param_2")]),
+    params = as.matrix(prior_frame[c("hyperp1","hyperp2")]),
     kernel = match(model_data$settings$kernel,c("squared_exp",
                                                 "matern12","matern32","matern52","periodic")),
     family = match(model_data$settings$family, c("exponential","gamma","weibull",
@@ -234,25 +243,20 @@ gp_fit.gp_model <- function(model_data, ...) {
 
 #' @export
 #' @method gp_fit gp_prior_pc
-gp_fit.gp_prior_pc <- function(prior_pc_data, ...) {
+gp_fit.gp_prior_pc <- function(prior_pc_data) {
+  message("Running prior predictive checks on model parameters")
+  prior_frame <- .process_priors(prior_pc_data)
   if ("one_ind" %in% class(prior_pc_data)) {
-    message("Running prior predictive checks on model parameters")
-    prior_frame <- parse_priors.one_ind(prior_pc_data)
     stan_obj <- stanmodels$prior_pc_one_ind
   } else if ("one_group" %in% class(prior_pc_data)) {
-    message("Running prior predictive checks on model parameters")
-    prior_frame <- parse_priors.one_group(prior_pc_data)
     stan_obj <- stanmodels$prior_pc_one_group
   } else if ("multi_group" %in% class(prior_pc_data)) {
-    message("Running prior predictive checks on model parameters")
-    prior_frame <- parse_priors.multi_group(prior_pc_data)
     stan_obj <- stanmodels$prior_pc_multi_group
   }
 
   prior_pc_data$settings <- append(prior_pc_data$settings,
                                    list(variables=prior_frame |>
                                           pull(prior_variable)))
-
   flags <- .get_flags(prior_pc_data)
 
   stan_dat <- list(
@@ -268,9 +272,9 @@ gp_fit.gp_prior_pc <- function(prior_pc_data, ...) {
     w0 = prior_pc_data$settings$w0,
     duration = prior_pc_data$settings$duration,
 
-    distributions = as.double(prior_frame$distribution_id),
+    distributions = as.double(prior_frame$dist_id),
     N_params = nrow(prior_frame),
-    params = as.matrix(prior_frame[c("param_1","param_2")]),
+    params = as.matrix(prior_frame[c("hyperp1","hyperp2")]),
     kernel = match(prior_pc_data$settings$kernel,c("squared_exp",
                                                    "matern12","matern32","matern52","periodic")),
     family = match(prior_pc_data$settings$family, c("exponential","gamma","weibull",
@@ -371,14 +375,13 @@ filter_data <- function(event_data, subs, by = c("ind", "group")) {
   median_dt <- median(stan_dat$dt)
 
   lapply(seq_len(n_chains), function(i) {
-    inits <- list(rho_group = median_dt * exp(rnorm(1, 0, 0.1)),
-      rho_ind = median_dt * exp(rnorm(1, 0, 0.1)),
+    inits <- list(
+      rho_group = median_dt * exp(rnorm(1, 0, 1)),
+      rho_ind = median_dt * exp(rnorm(1, 0, 1)),
 
-      alpha_group = 0.3 * exp(rnorm(1, 0, 0.1)),
-      alpha_ind = 0.3 * exp(rnorm(1, 0, 0.1)),
+      alpha_group = 0.6 * exp(rnorm(1, 0, 0.1)),
+      alpha_ind = 0.6 * exp(rnorm(1, 0, 0.1)),
 
-      alpha = 0.4 * exp(rnorm(1, 0, 0.1)),
-      omega = 0.5,
       mu_group = -log(mean_dt) + rnorm(1, 0, 0.1),
 
       sigma_ind = 0.2,
@@ -402,6 +405,48 @@ filter_data <- function(event_data, subs, by = c("ind", "group")) {
     append(inits,surv)
 
   })
+}
+
+.get_rho_density <- function(prior_frame,prctile) {
+
+  rho_params <- c("rho_ind","rho_group","rho_global")
+
+
+  lower_rhos <- lapply(rho_params, \(i) {
+    if (i %in% prior_frame$param) {
+      rho_hyperparams <- prior_frame[prior_frame$param == i,]
+
+      lower_rho <- switch(rho_hyperparams$dist,
+                          "normal" = qnorm(prctile,
+                                           rho_hyperparams$hyperp1,
+                                           rho_hyperparams$hyperp2),
+                          "lognormal" = qlnorm(prctile,
+                                               rho_hyperparams$hyperp1,
+                                               rho_hyperparams$hyperp2),
+                          "cauchy" = qcauchy(prctile,
+                                             rho_hyperparams$hyperp1,
+                                             rho_hyperparams$hyperp2),
+                          "invgamma" = invgamma::qinvgamma(prctile,
+                                                          rho_hyperparams$hyperp1,
+                                                          rho_hyperparams$hyperp2),
+                          "gamma" = qgamma(prctile,
+                                           rho_hyperparams$hyperp1,
+                                           rho_hyperparams$hyperp2),
+                          "exp" = qexp(prctile,
+                                       rho_hyperparams$hyperp1)
+      )
+    } else {
+      lower_rho <- NA
+    }
+    if (lower_rho <= 0 & !is.na(lower_rho)) {
+      warning(paste0("At the ", prctile, " percentile lower bound for your lengthscale prior, ",i, " is less than or equal to 0.
+                     Setting cutoff to 0.05. If this is a mistake, please use default values or adjust your prior or expected lengthscale"))
+    }
+    lower_rho
+  }) |> list_c()
+
+  lower_rhos <- pmax(0.05,lower_rhos)
+  return(lower_rhos)
 }
 
 

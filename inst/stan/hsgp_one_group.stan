@@ -30,8 +30,8 @@ parameters {
   // Individual-level
   real<lower=0> rho_ind;
 
-  real<lower=0> alpha_ind;
-  real<lower=0> alpha_group;
+  real<lower=0.05> alpha_ind;
+  real<lower=0.05> alpha_group;
 
 
   // indect intercept
@@ -83,21 +83,20 @@ model {
   to_vector(z_ind_raw) ~ std_normal();
 
   mu_raw_ind ~ std_normal();
-  sigma_ind ~ normal(0.5,0.2);
+
 
   //omega ~ beta(2,2);
 
   apply_prior_lp(mu_group, distributions[1], params[1, 1], params[1, 2]);
 
-  apply_prior_lp(alpha_group, distributions[2], params[2, 1], params[2, 2]);
-  apply_prior_lp(alpha_ind, distributions[3], params[3, 1], params[3, 2]);
+  apply_prior_lp(alpha_ind, distributions[2], params[2, 1], params[2, 2]);
+  apply_prior_lp(alpha_group, distributions[3], params[3, 1], params[3, 2]);
 
-  apply_prior_lp(rho_group, distributions[4], params[4, 1], params[4, 2]);
-  apply_prior_lp(rho_ind, distributions[5], params[5, 1], params[5, 2]);
+  apply_prior_lp(rho_ind, distributions[4], params[4, 1], params[4, 2]);
+  apply_prior_lp(rho_group, distributions[5], params[5, 1], params[5, 2]);
+  apply_prior_lp(sigma_ind, distributions[6], params[6, 1], params[6, 2]);
 
-
-  if (include_k != 0) apply_prior_lp(k[1], distributions[include_k],
-  params[include_k, 1], params[include_k, 2]);
+  if (include_k != 0) apply_prior_lp(k[1], distributions[include_k],params[include_k, 1], params[include_k, 2]);
   if (include_shape != 0) apply_prior_lp(shape[1], distributions[include_shape],
   params[include_shape, 1], params[include_shape, 2]);
   if (include_sigma_lognormal != 0) apply_prior_lp(sigma_lognormal[1], distributions[include_sigma_lognormal],

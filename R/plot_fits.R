@@ -58,7 +58,7 @@
 plot.gp_model <- function(model, level = c("ind", "group", "global"), .width = c(0.50, 0.8, 0.99), n_samples = 0, prior = FALSE,
                           show_ci = TRUE, facet = show_ci, show_events = TRUE, dev_only = FALSE,
                           show_traces = TRUE, palette = "Purples", width = 0.1, height = 0.2, size = 10,
-                          sample_alpha = 0.6, sample_colour = "darkgrey", sample_linewidth = 0.9, rescale = FALSE) {
+                          sample_alpha = 0.6, sample_colour = "darkgrey", sample_linewidth = 0.9, rescale = FALSE, plot_mu = TRUE,legend.position = "right") {
   level <- match.arg(level)
   model_classes <- class(model)
 
@@ -69,7 +69,7 @@ plot.gp_model <- function(model, level = c("ind", "group", "global"), .width = c
   # tidy_model <- reconstruct_traces(model,level=level,.width=.width,dev_only=dev_only,from_prior=prior,...)
   tidy_model <- tidy_traces(model,
     level = level,
-    .width = .width, dev_only = dev_only, prior = prior, rescale = rescale
+    .width = .width, dev_only = dev_only, prior = prior, rescale = rescale, add_mu = plot_mu
   )
 
   if (rescale) {
@@ -126,7 +126,8 @@ plot.gp_model <- function(model, level = c("ind", "group", "global"), .width = c
         ),
         alpha = 0.6, linewidth = 0.5
       ) +
-        ggplot2::scale_fill_brewer(palette = palette, direction = -1, name = "CrI Width")
+        ggplot2::scale_fill_brewer(palette = palette, direction = -1, name = "CrI Width") +
+        ggplot2::theme(legend.position = legend.position)
     } else if (!is.null(fit_sub) && nrow(fit_sub) > 0) {
       p <- p + ggplot2::geom_line(
         data = fit_sub,
@@ -147,7 +148,7 @@ plot.gp_model <- function(model, level = c("ind", "group", "global"), .width = c
       p <- p + ggplot2::geom_line(
         data = sample_sub,
         ggplot2::aes(
-          x = x, y = y,
+          x = t, y = eta,
           group = interaction(sample, .data[[facet_var]])
         ),
         inherit.aes = FALSE, linewidth = sample_linewidth,

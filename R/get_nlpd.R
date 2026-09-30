@@ -2,7 +2,7 @@
 #' traces
 #' @inheritParams plot.gp_model
 #' @export
-get_nlpd <- function(model, level = "ind", resolution = 0.1,
+get_accuracy_metric <- function(model, level = "ind", resolution = 0.1,
                      prior = FALSE, dev_only = FALSE, rescale = TRUE) {
   if (!rescale) warning("NLPD should be computed between traces with the same scale.")
 
@@ -32,10 +32,9 @@ get_nlpd <- function(model, level = "ind", resolution = 0.1,
   }
 
   if (level == "global") {
-    summary_traces$y_ground <- approx(
-      t = traces$t,
+    summary_traces$y_ground <- approx(t = traces$t,
       eta = traces$eta,
-      xout = summary_traces$t
+      tout = summary_traces$t
     )$y
   } else {
     summary_traces <- summary_traces |>
@@ -44,26 +43,24 @@ get_nlpd <- function(model, level = "ind", resolution = 0.1,
         current_id <- .y[[level]]
         traces_sub <- dplyr::filter(traces, .data[[level]] == current_id)
 
-        .x$y_ground <- approx(
-          x = traces_sub$t,
-          y = traces_sub$eta,
-          xout = .x$t
-        )$y
+        .x$eta_ground <- approx(x = traces_sub$t,y = traces_sub$eta,
+          xout = .x$t)$y
+
         .x
       }) |>
       dplyr::ungroup()
   }
 
   summary_traces <- summary_traces |>
-    tidyr::drop_na(y_ground, means, sds) |>
-    dplyr::mutate(dnorms = dnorm(y_ground + log(scale_factor),
+    tidyr::drop_na(eta_ground, means, sds) |>
+    dplyr::mutate(dnorms = dnorm(eta_ground + log(scale_factor),
       means, sds,
       log = TRUE
     )) |>
     dplyr::group_by(.data[[level]]) |>
     dplyr::summarise(
       mean_NLPD = -mean(dnorms),
-      sum_NLPD = -sum(dnorms),
+      corr = cor(eta_ground + log(scale_factor), means),
       .groups = "drop"
     )
   return(summary_traces)

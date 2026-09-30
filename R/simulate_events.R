@@ -65,7 +65,6 @@ simulate_events <- function(
     group = group
   )
 
-  set.seed(seed_events)
 
   trace_data$sim_params$seed_events <- seed_events
   trace_data$sim_params$family <- family
@@ -82,11 +81,11 @@ simulate_events <- function(
 
   if (family != "log-normal") {
     if (family == "exponential") {
-      shape <- k <- 1
+      shape <- k <- rep(1,length(shape))
     } else if (family == "gamma") {
-      shape <- 1
+      shape <- rep(1,length(shape))
     } else if (family == "weibull") {
-      k <- 1
+      k <- rep(1,length(k))
     }
   }
 
@@ -174,6 +173,10 @@ simulate_events <- function(
 
 
   # Parallel C++ loop
+
+  if (is.null(seed_events)) {
+    seed_events <- sample(10:100000,1)
+  }
   events_raw <- simulate_renewal_flexible(
     time_vec = time_vec,
     modulant_mat_flat = modulant_mat_flat,
@@ -184,26 +187,22 @@ simulate_events <- function(
     n_samples = n_samples,
     max_x = max_t,
     use_samples = use_samples,
-    start_time = - 0.1 * max_t)
+    start_time = - 0.1 * max_t,
+    seed_events = seed_events)
 
   events <- events_raw |>
     dplyr::mutate(
-      ind   = ind_ids[ind],
+      ind = ind_ids[ind],
       group = group_levels[group]
     )
+
+
   ## Determine censoring
   if (!use_samples) {
 
-    events <- events |>
+    events <- .apply_censoring(events) |>
       dplyr::group_by(ind) |>
-      dplyr::group_modify(\(ev_i, y) {
-        current_group_val <- ev_i$group[1]
-        ev_i |> dplyr::mutate(
-          dt = diff(c(0, event_times)),
-          censored = c(rep(0, length(event_times) - 1), 1)
-        )
-      }) |>
-      ungroup()
+      dplyr::distinct(event_times, .keep_all = TRUE)
   }
 
 
@@ -259,31 +258,17 @@ simulate_events <- function(
   return(interp_df)
 }
 
+.apply_censoring <- function(events) {
 
-#' @noRd
-.simulate_renewal <- function(trace, modulant, shape, k, sigma, Q, resolution = 200) {
-  if (!is.null(resolution)) {
-    lerp <- 1 / resolution
+  events <- events |>
+    dplyr::group_by(ind) |>
+    dplyr::group_modify(\(ev_i, y) {
+      current_group_val <- ev_i$group[1]
+      ev_i |> dplyr::mutate(
+        dt = diff(c(0, event_times)),
+        censored = c(rep(0, length(event_times) - 1), 1)
+      )
+    }) |>
+    ungroup()
 
-    trace_parts <- trace |> pull({{ modulant }})
-    trace_parts <- trace_parts |> approx(n = max(trace$x) * lerp)
-
-    modulant <- trace_parts$y
-    time <- trace_parts$x
-  } else {
-    modulant <- trace |> pull({{ modulant }})
-    time <- trace$x
-  }
-
-  if (!missing(shape) && !missing(k)) {
-    events <- simulate_renewal_multi_parallel(time, modulant, 1, shape, k)
-  } else if (!missing(sigma) && !missing(Q)) {
-    events <- simulate_renewal(time, modulant, sigma, Q)
-  }
-  renewal_events <- tibble(
-    event_times = events,
-    dt = diff(c(0, events))
-  ) |>
-    dplyr::filter(event_times > 0)
-  return(renewal_events)
 }

@@ -9,7 +9,8 @@ reconstruct_traces(
   level = c("ind", "group", "global"),
   prior = FALSE,
   dev_only = FALSE,
-  resolution = 0.1
+  resolution = 0.1,
+  add_mu = TRUE
 )
 }
 \arguments{
