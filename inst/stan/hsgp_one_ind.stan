@@ -75,3 +75,21 @@ model {
   target += sum(log_kernel);
 }
 
+generated quantities {
+
+  // Log likelihood computation
+  vector[N_total] log_lik;
+
+  matrix[n_quad+1,N_total] eta_quad;
+
+  for (j in 1:n_quad+1) {
+
+    vector[N_total] f_ind = PHI_quad[j] * beta_ind;
+
+    eta_quad[j] = mu_ind + f_ind';
+  }
+
+#include include/log-likelihood.stan
+  log_lik = log_kernel;
+
+}
